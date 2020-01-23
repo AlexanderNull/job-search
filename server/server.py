@@ -1,11 +1,17 @@
 import os
 from flask import Flask, send_from_directory, request
 from pymongo import MongoClient
+import requests
 
 app = Flask(__name__, static_folder='../web-app/build')
+client = MongoClient('localhost', 27107)
+db = client['job-search-database']
+
+jobs_host = 'https://jobs.googleapis.com'
 
 @app.route('/api/jobs', methods=['POST'])
 def loadJobs():
+    # jobsResponse = requests.get(f'{jobs_host}/v4beta1/jobs:search')
     pass
 
 @app.route('/api/jobs')
