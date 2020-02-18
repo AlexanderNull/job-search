@@ -1,13 +1,18 @@
 import os
-from flask import Flask, send_from_directory, request
+from flask import abort, Flask, send_from_directory, request, jsonify
 from pymongo import MongoClient
 import requests
+
+from job_provider import JobProvider
 
 app = Flask(__name__, static_folder='../web-app/build')
 client = MongoClient('localhost', 27107)
 db = client['job-search-database']
 
-jobs_host = 'https://jobs.googleapis.com'
+jobs_host = 'https://hacker-news.firebaseio.com/v0'
+historical_limit = 2
+
+job_provider = JobProvider(jobs_host, historical_limit)
 
 @app.route('/api/jobs', methods=['POST'])
 def loadJobs():
@@ -16,8 +21,11 @@ def loadJobs():
 
 @app.route('/api/jobs')
 def getJobs():
-    # TODO: get latest unlabeled jobs and return json
-    pass
+    new_jobs = job_provider.get_next_historical()
+    if new_jobs is not None:
+        return jsonify(new_jobs)
+    else:
+        abort(404)
 
 @app.route('/api/jobs/<id>', methods=['PUT'])
 def labelJob(id):
