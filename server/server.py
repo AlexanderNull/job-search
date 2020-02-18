@@ -6,7 +6,7 @@ import requests
 from job_provider import JobProvider
 
 app = Flask(__name__, static_folder='../web-app/build')
-client = MongoClient('localhost', 27107)
+client = MongoClient('localhost', 27017)
 db = client['job-search-database']
 
 jobs_host = 'https://hacker-news.firebaseio.com/v0'
