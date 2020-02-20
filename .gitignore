@@ -3,6 +3,7 @@
 web-app/build/*
 web-node_modules/*
 **/.vscode
+__pycache__
 
 # Logs
 logs
