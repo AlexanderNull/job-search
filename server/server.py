@@ -1,23 +1,48 @@
 import os
-from flask import Flask, send_from_directory, request
+from flask import abort, Flask, send_from_directory, request, jsonify
 from pymongo import MongoClient
 import requests
 
-app = Flask(__name__, static_folder='../web-app/build')
-client = MongoClient('localhost', 27107)
-db = client['job-search-database']
+from job_provider import JobProvider
 
-jobs_host = 'https://jobs.googleapis.com'
+app = Flask(__name__, static_folder='../web-app/build')
+client = MongoClient('localhost', 27017)
+# TODO: Config driven
+jobs_host = 'https://hacker-news.firebaseio.com/v0'
+historical_limit = 1
+throttle_group_size = 20
+throttle_duration = 1
+db_name = 'job-search-database'
+table_name = 'jobs'
+label_key = 'preferred'
+
+db = client[db_name]
+jobs_table = db[table_name]
+
+job_provider = JobProvider(jobs_host, throttle_group_size, throttle_duration)
 
 @app.route('/api/jobs', methods=['POST'])
 def loadJobs():
     # jobsResponse = requests.get(f'{jobs_host}/v4beta1/jobs:search')
     pass
 
-@app.route('/api/jobs')
+@app.route('/api/jobs/unlabeled')
 def getJobs():
-    # TODO: get latest unlabeled jobs and return json
-    pass
+    unlabeled_jobs = list(jobs_table.find({ label_key: None }))
+    if len(unlabeled_jobs) != 0:
+        return jsonify([JobProvider.format_post(x) for x in unlabeled_jobs])
+    else:
+        oldest_saved_post = jobs_table.find_one(sort=[('parent', 1)])
+        newest_saved_post = jobs_table.find_one(sort=[('parent', -1)])
+        oldest_id, newest_id = None, None if oldest_saved_post is None or newest_saved_post is None else (
+            oldest_saved_post['parent'], newest_saved_post['parent']
+        )
+        new_jobs = job_provider.get_next_post(historical_limit, oldest_id, newest_id)
+        if new_jobs is not None:
+            jobs_table.insert_many(new_jobs)
+            return jsonify([JobProvider.format_post(x) for x in new_jobs])
+        else:
+            abort(404)
 
 @app.route('/api/jobs/<id>', methods=['PUT'])
 def labelJob(id):
