@@ -1,12 +1,6 @@
 import {action, observable} from 'mobx';
 
-const getJob = (i) => ({
-    company: 'pfizer',
-    state: 'oregon',
-    city: 'portland',
-    description: 'Lorem ipsum but like a lot. Lorem ipsum but like a lot. Lorem ipsum but like a lot. Lorem ipsum but like a lot. Lorem ipsum but like a lot. Lorem ipsum but like a lot. Lorem ipsum but like a lot. Lorem ipsum but like a lot. Lorem ipsum but like a lot. Lorem ipsum but like a lot. Lorem ipsum but like a lot. Lorem ipsum but like a lot. Lorem ipsum but like a lot. Lorem ipsum but like a lot. Lorem ipsum but like a lot. Lorem ipsum but like a lot. Lorem ipsum but like a lot. Lorem ipsum but like a lot. Lorem ipsum but like a lot. Lorem ipsum but like a lot.',
-    title: `Job #${i}`,
-}) 
+const serverUrl = 'http://localhost:5000'
 
 const jobStore = observable({
     nextJob: null,
@@ -14,13 +8,14 @@ const jobStore = observable({
 });
 
 // TODO: call server, get next X jobs
-jobStore.loadJobs = action(function () {
+jobStore.loadJobs = action(async function () {
     console.log('Grabbing more jobs!');
-    const newJobs = Array(10).fill(null).map((x, i) => getJob(i));
+    const jobsCall = await fetch(`${serverUrl}/api/jobs/unlabeled`);
+    const moreJobs = await jobsCall.json();
     if (jobStore.nextJob == null) {
-        jobStore.nextJob = newJobs.shift();
+        jobStore.nextJob = moreJobs.shift();
     }
-    jobStore.jobs = newJobs;
+    jobStore.jobs = moreJobs;
 });
 
 jobStore.handleKeyDown = action(function(keyEvent) {

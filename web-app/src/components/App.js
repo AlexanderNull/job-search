@@ -5,8 +5,6 @@ import Posting from './Posting';
 import NoJobs from './NoJobs';
 import jobStore from '../state/JobStore';
 
-
-
 class App extends React.Component {
   componentDidMount() {
     window.onkeydown = jobStore.handleKeyDown;

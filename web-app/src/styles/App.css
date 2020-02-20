@@ -19,19 +19,21 @@
 }
 
 .posting .head .title {
-  flex: 2 auto;
+  flex: 3 auto;
   font-size: 1.5em;
   border-bottom: solid 1px #61dafb;
   padding: 10px;
 }
 
 .posting .head .company {
-  flex: 1 auto;
+  flex: 2 auto;
 }
 
 .posting .description {
   min-height: 50vh;
   padding: 20px;
+  text-align: left;
+  line-height: 1.5em;
 }
 
 .posting .location {
