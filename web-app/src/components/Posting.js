@@ -8,6 +8,7 @@ function Posting (props) {
             text,
             by,
         },
+        numberOfJobs
     } = props;
 
     const parsedDate = new Date();
@@ -16,8 +17,9 @@ function Posting (props) {
     return (
         <div className="posting">
             <section className="head">
-                <div className="title"><a href={`https://news.ycombinator.com/item?id=${id}`}>{by}</a></div>
-                <div className="company">{parsedDate.toLocaleDateString()}</div>
+                <div className="links"><a href={`https://news.ycombinator.com/item?id=${id}`}>{by}</a></div>
+                <div className="date">{parsedDate.toLocaleDateString()}</div>
+                <div className="info">Remaining: {numberOfJobs}</div>
             </section>
             <section className="description">
                 <JobText dangerousText={text} />

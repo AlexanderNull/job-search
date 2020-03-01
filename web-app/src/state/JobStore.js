@@ -37,7 +37,6 @@ jobStore.handleKeyDown = action(function(keyEvent) {
 
 // TODO: send label to server
 jobStore.labelJob = action(async function(isMatch) {
-    console.log(jobStore.nextJob.id)
     const updateCall = await fetch(`${serverUrl}/api/jobs/${jobStore.nextJob.id}`, {
         method: 'PUT',
         headers: {
