@@ -36,12 +36,26 @@ jobStore.handleKeyDown = action(function(keyEvent) {
 });
 
 // TODO: send label to server
-jobStore.labelJob = action(function(isMatch) {
-    console.log(isMatch ? 'Looks Good!' : 'Another Michigan job?');
-    jobStore.nextJob = jobStore.jobs.shift();
-    if (jobStore.jobs.length == 0) {
-        jobStore.loadJobs();
+jobStore.labelJob = action(async function(isMatch) {
+    console.log(jobStore.nextJob.id)
+    const updateCall = await fetch(`${serverUrl}/api/jobs/${jobStore.nextJob.id}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            'preferred': isMatch,
+        }),
+    });
+    if (updateCall.status === 200) {
+        jobStore.nextJob = jobStore.jobs.shift();
+        if (jobStore.jobs.length == 0) {
+            jobStore.loadJobs();
+        }
+
+    } else {
+        console.log('Couldn\'t update current job, server call failed');
     }
-})
+});
 
 export default jobStore;

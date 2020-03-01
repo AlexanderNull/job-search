@@ -26,6 +26,18 @@ def loadJobs():
     # jobsResponse = requests.get(f'{jobs_host}/v4beta1/jobs:search')
     pass
 
+@app.route('/api/jobs/<int:job_id>', methods=['PUT'])
+def updateJob(job_id):
+    post_body = request.get_json()
+    if label_key in post_body:
+        update = jobs_table.update({ 'id': job_id }, { '$set': { label_key: post_body[label_key] }})
+        if update['updatedExisting']:
+            return jsonify(JobProvider.format_post(jobs_table.find_one({ 'id': job_id })))
+        else:
+            return abort(500)
+    
+    abort(400)
+
 @app.route('/api/jobs/unlabeled')
 def getJobs():
     unlabeled_jobs = list(jobs_table.find({ label_key: None }))
