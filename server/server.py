@@ -46,7 +46,7 @@ def getJobs():
     else:
         oldest_saved_post = jobs_table.find_one(sort=[('parent', 1)])
         newest_saved_post = jobs_table.find_one(sort=[('parent', -1)])
-        oldest_id, newest_id = None, None if oldest_saved_post is None or newest_saved_post is None else (
+        oldest_id, newest_id = (None, None) if oldest_saved_post is None or newest_saved_post is None else (
             oldest_saved_post['parent'], newest_saved_post['parent']
         )
         new_jobs = job_provider.get_next_post(historical_limit, oldest_id, newest_id)
