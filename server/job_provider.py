@@ -1,7 +1,7 @@
 import requests
 import time
 from datetime import date
-from itertools import dropwhile, takewhile
+from itertools import chain, dropwhile, takewhile
 
 class JobProvider:
     hiring_string = 'ho is hiring?'
@@ -17,7 +17,7 @@ class JobProvider:
         whois_post_ids = self.get_json(f'/user/{self.hiring_user}/submitted.json')
         post_ids_iter = iter(whois_post_ids) if lowest_saved_id is None or highest_saved_id is None else (
             # Overoptimization perhaps? assumption is that there's going to be more than 2x posts on the right tail than we'll iterate through here
-            takewhile(lambda x: x > highest_saved_id) + dropwhile(lambda x: x >= lowest_saved_id)
+            chain(takewhile(lambda x: x > highest_saved_id, whois_post_ids), dropwhile(lambda x: x >= lowest_saved_id, whois_post_ids))
         )
         month_posts = None
 

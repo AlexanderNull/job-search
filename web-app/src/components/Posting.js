@@ -1,28 +1,43 @@
 import React from 'react';
 
-// TODO: handle keydown event here
-function Posting(props) {
+function Posting (props) {
     const {
         job: {
-            company,
-            state,
-            city,
-            description,
-            title,
+            date,
+            id,
+            text,
+            by,
         },
+        numberOfJobs
     } = props;
+
+    const parsedDate = new Date();
+    parsedDate.setTime(date * 1000);
 
     return (
         <div className="posting">
             <section className="head">
-                <div className="title">{title}</div>
-                <div className="company">{company}</div>
+                <div className="links"><a href={`https://news.ycombinator.com/item?id=${id}`}>{by}</a></div>
+                <div className="date">{parsedDate.toLocaleDateString()}</div>
+                <div className="info">Remaining: {numberOfJobs}</div>
             </section>
-            <section className="description">{description}</section>
-            <section className="location">
-                <div className="state">{state}</div>
-                <div className="city">{city}</div>
+            <section className="description">
+                <JobText dangerousText={text} />
             </section>
+        </div>
+    )
+}
+
+// Definitely not going to parse out all of this by hand
+// Definitely not going to trust "Hacker" News with having safe input
+// Stick to textarea to avoid XSS issues
+// TODO: maybe handle the links
+function JobText (props) {
+    var decoder = document.createElement('textarea');
+    decoder.innerHTML = props.dangerousText;
+    return (
+        <div>
+            {decoder.value.split('<p>').map(t => <p>{t}</p>)}
         </div>
     )
 }

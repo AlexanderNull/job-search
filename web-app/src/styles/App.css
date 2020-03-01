@@ -7,31 +7,36 @@
   align-items: center;
   font-size: calc(10px + 2vmin);
   color: white;
-  padding-top: 25px;
 }
 
 .posting .head {
   display: flex;
-  min-height: 15vh;
+  min-height: 8vh;
   flex-direction: row;
   justify-content: space-around;
   align-items: center;
 }
 
-.posting .head .title {
-  flex: 2 auto;
+.posting .head .links {
+  flex: 3 auto;
   font-size: 1.5em;
   border-bottom: solid 1px #61dafb;
   padding: 10px;
 }
 
-.posting .head .company {
-  flex: 1 auto;
+.posting .head .date {
+  flex: 2 auto;
+}
+
+.posting .head .info {
+  flex: 2 auto;
 }
 
 .posting .description {
   min-height: 50vh;
   padding: 20px;
+  text-align: left;
+  line-height: 1.5em;
 }
 
 .posting .location {
