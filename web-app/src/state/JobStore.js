@@ -4,10 +4,11 @@ const serverUrl = 'http://localhost:5000'
 
 const jobStore = observable({
     nextJob: null,
+    prevJobs: [],
     jobs: [],
 });
 
-// TODO: call server, get next X jobs
+// TODO: need a loader here, pulling everything from a month takes a minute or two
 jobStore.loadJobs = action(async function () {
     console.log('Grabbing more jobs!');
     const jobsCall = await fetch(`${serverUrl}/api/jobs/unlabeled`);
@@ -30,12 +31,17 @@ jobStore.handleKeyDown = action(function(keyEvent) {
             jobStore.labelJob(true);
             keyEvent.stopPropagation();
             break;
+        case 8: // backspace
+        case 46: // delete
+            jobStore.goBack();
+            keyEvent.preventDefault();
+            keyEvent.stopPropagation();
+            break;
         default:
             // don't care about other keys, ignore
     }
 });
 
-// TODO: send label to server
 jobStore.labelJob = action(async function(isMatch) {
     const updateCall = await fetch(`${serverUrl}/api/jobs/${jobStore.nextJob.id}`, {
         method: 'PUT',
@@ -47,6 +53,7 @@ jobStore.labelJob = action(async function(isMatch) {
         }),
     });
     if (updateCall.status === 200) {
+        jobStore.prevJobs.push(jobStore.nextJob);
         jobStore.nextJob = jobStore.jobs.shift();
         if (jobStore.jobs.length == 0) {
             jobStore.loadJobs();
@@ -54,6 +61,14 @@ jobStore.labelJob = action(async function(isMatch) {
 
     } else {
         console.log('Couldn\'t update current job, server call failed');
+    }
+});
+
+// Label some of these jobs too fast, need a way to go back to a previously labeled job
+jobStore.goBack = action(function () {
+    if (jobStore.prevJobs.length > 0) {
+        jobStore.jobs.unshift(jobStore.nextJob);
+        jobStore.nextJob = jobStore.prevJobs.pop();
     }
 });
 
