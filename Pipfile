@@ -15,6 +15,7 @@ tensorflow = "*"
 pymongo = "*"
 requests = "*"
 python-dotenv = "*"
+yaml = "*"
 
 [requires]
-python_version = "3.7"
+python_version = "3.6"
