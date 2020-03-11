@@ -1,20 +1,21 @@
-import os
 from flask import abort, Flask, send_from_directory, request, jsonify
+import os
 from pymongo import MongoClient
 import requests
 
 from job_provider import JobProvider
 
+from config import config
+
 app = Flask(__name__, static_folder='../web-app/build')
-client = MongoClient('localhost', 27017)
-# TODO: Config driven
-jobs_host = 'https://hacker-news.firebaseio.com/v0'
-historical_limit = 1
-throttle_group_size = 20
-throttle_duration = 1
-db_name = 'job-search-database'
-table_name = 'jobs'
-label_key = 'preferred'
+client = MongoClient(config['mongo']['host'], config['mongo']['port'])
+jobs_host = config['jobs_firebase_host']
+historical_limit = config['historical_limit']
+throttle_group_size = config['throttle_group_size']
+throttle_duration = config['throttle_duration']
+db_name = config['mongo']['data']['db_name']
+table_name = config['mongo']['data']['table_name']
+label_key = config['mongo']['data']['label_key']
 
 db = client[db_name]
 jobs_table = db[table_name]

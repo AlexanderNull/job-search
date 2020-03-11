@@ -3,9 +3,11 @@ import time
 from datetime import date
 from itertools import chain, dropwhile, takewhile
 
+from config import config
+
 class JobProvider:
-    hiring_string = 'ho is hiring?'
-    hiring_user = 'whoishiring'
+    hiring_string = config['whos_hiring_search_string']
+    hiring_user = config['whos_hiring_user']
 
     def __init__(self, jobs_api_url, throttle_group_size = None, throttle_duration = 1):
         self.jobs_api_url = jobs_api_url

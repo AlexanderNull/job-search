@@ -1,0 +1,17 @@
+{
+    "mongo": {
+        "host": "localhost",
+        "port": 27017,
+        "data": {
+            "db_name": "job-search-database",
+            "table_name": "jobs",
+            "label_key": "preferred"
+        }
+    },
+    "jobs_firebase_host": "https://hacker-news.firebaseio.com/v0",
+    "historical_limit": 1,
+    "throttle_group_size": 20,
+    "throttle_duration": 1,
+    "whos_hiring_user": "whoishiring",
+    "whos_hiring_search_string":  "ho is hiring?"
+}
