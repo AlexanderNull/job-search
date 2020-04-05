@@ -3,7 +3,7 @@ import time
 from datetime import date
 from itertools import chain, dropwhile, takewhile
 
-from config import config
+from .config import config
 
 class JobProvider:
     hiring_string = config['whos_hiring_search_string']
