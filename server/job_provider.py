@@ -38,7 +38,6 @@ class JobProvider:
             return None
         else:
             parent_date = hiring_post['time']
-            print(f"Saving data for {date.fromtimestamp(parent_date)}") # TODO: remove this
             for i, child_id in enumerate(hiring_post['kids']):
                 # TODO: update this if you intend for concurrent users
                 if self.throttle_group_size is not None:
