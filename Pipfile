@@ -15,6 +15,13 @@ tensorflow = "*"
 pymongo = "*"
 requests = "*"
 python-dotenv = "*"
+spacy = "*"
+gensim = "*"
+keras = "*"
+tqdm = "*"
+nltk = "*"
+sklearn = "*"
+bokeh = "*"
 
 [requires]
 python_version = "3.6"

@@ -6,6 +6,10 @@
             "db_name": "job-search-database",
             "table_name": "jobs",
             "label_key": "preferred"
+        },
+        "embedding_data": {
+            "db_name": "job-search-database",
+            "table_name": "embeddings"
         }
     },
     "jobs_firebase_host": "https://hacker-news.firebaseio.com/v0",

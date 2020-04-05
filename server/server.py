@@ -3,9 +3,10 @@ import os
 from pymongo import MongoClient
 import requests
 
+from config import config
+import db_tools
 from job_provider import JobProvider
 
-from config import config
 
 app = Flask(__name__, static_folder='../web-app/build')
 client = MongoClient(config['mongo']['host'], config['mongo']['port'])
@@ -45,11 +46,7 @@ def getJobs():
     if len(unlabeled_jobs) != 0:
         return jsonify([JobProvider.format_post(x) for x in unlabeled_jobs])
     else:
-        oldest_saved_post = jobs_table.find_one(sort=[('parent', 1)])
-        newest_saved_post = jobs_table.find_one(sort=[('parent', -1)])
-        oldest_id, newest_id = (None, None) if oldest_saved_post is None or newest_saved_post is None else (
-            oldest_saved_post['parent'], newest_saved_post['parent']
-        )
+        oldest_id, newist_id = db_tools.get_jobs_range(jobs_table)
         new_jobs = job_provider.get_next_post(historical_limit, oldest_id, newest_id)
         if new_jobs is not None:
             jobs_table.insert_many(new_jobs)
@@ -67,3 +64,5 @@ def labelJob(id):
 def reactApp(path):
     if path != '' and os.path.exists(app.static_folder + '/' + path):
         return send_from_directory(app.static_folder, path)
+
+def 

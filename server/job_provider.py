@@ -3,7 +3,7 @@ import time
 from datetime import date
 from itertools import chain, dropwhile, takewhile
 
-from config import config
+from .config import config
 
 class JobProvider:
     hiring_string = config['whos_hiring_search_string']
@@ -38,6 +38,7 @@ class JobProvider:
             return None
         else:
             parent_date = hiring_post['time']
+            print(f"Saving data for {date.fromtimestamp(parent_date)}") # TODO: remove this
             for i, child_id in enumerate(hiring_post['kids']):
                 # TODO: update this if you intend for concurrent users
                 if self.throttle_group_size is not None:
