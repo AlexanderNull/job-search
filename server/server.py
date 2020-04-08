@@ -6,6 +6,7 @@ import requests
 from config import config
 import db_tools
 from job_provider import JobProvider
+from train_model import ModelProvider
 
 
 app = Flask(__name__, static_folder='../web-app/build')
@@ -22,11 +23,14 @@ db = client[db_name]
 jobs_table = db[table_name]
 
 job_provider = JobProvider(jobs_host, throttle_group_size, throttle_duration)
+model_provider = ModelProvider()
 
-@app.route('/api/jobs', methods=['POST'])
-def loadJobs():
-    # jobsResponse = requests.get(f'{jobs_host}/v4beta1/jobs:search')
-    pass
+# TODO: handle error condition of no saved embedding when run if you get around to it
+@app.route('/api/model', methods=['POST'])
+def trainModel():
+    labeled_jobs = jobs_table.find({ '$and': [{ 'preferred': { '$exists': True } }, { 'text': { '$exists': True } }] })
+    score = model_provider.train_model(labeled_jobs)
+    return jsonify({ 'score': score })
 
 @app.route('/api/jobs/<int:job_id>', methods=['PUT'])
 def updateJob(job_id):
@@ -64,5 +68,3 @@ def labelJob(id):
 def reactApp(path):
     if path != '' and os.path.exists(app.static_folder + '/' + path):
         return send_from_directory(app.static_folder, path)
-
-def 

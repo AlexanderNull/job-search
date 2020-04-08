@@ -17,5 +17,7 @@
     "throttle_group_size": 20,
     "throttle_duration": 1,
     "whos_hiring_user": "whoishiring",
-    "whos_hiring_search_string":  "ho is hiring?"
+    "whos_hiring_search_string":  "ho is hiring?",
+    "model_save_path": "personal_models/sentiment_model.tf",
+    "embedding_save_path": "embedding/job_embedding.kv"
 }
