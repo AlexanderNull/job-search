@@ -3,10 +3,10 @@ import os
 from pymongo import MongoClient
 import requests
 
-from config import config
-import db_tools
-from job_provider import JobProvider
-from train_model import ModelProvider
+from server.config import config
+import server.db_tools
+from server.job_provider import JobProvider
+from server.train_model import ModelProvider
 
 
 app = Flask(__name__, static_folder='../web-app/build')

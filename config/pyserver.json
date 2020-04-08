@@ -18,6 +18,6 @@
     "throttle_duration": 1,
     "whos_hiring_user": "whoishiring",
     "whos_hiring_search_string":  "ho is hiring?",
-    "model_save_path": "personal_models/sentiment_model.tf",
-    "embedding_save_path": "embedding/job_embedding.kv"
+    "model_save_path": "server/personal_models/sentiment_model.tf",
+    "embedding_save_path": "server/embedding/job_embedding.kv"
 }
