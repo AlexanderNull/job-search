@@ -1,8 +1,8 @@
 from gensim.models import KeyedVectors
 from gensim.models.doc2vec import LabeledSentence
-import keras
-from keras.models import Sequential
-from keras.layers import Dense
+from tensorflow import keras
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
 from nltk.tokenize import TweetTokenizer
 import numpy
 import pandas
@@ -55,10 +55,11 @@ class ModelProvider():
         score = model.evaluate(test_vecs, y_test, batch_size=30, verbose=2)
         print(f'Model score: {score[1]}')
 
+        # TODO: use config to reject models below certain accuracy threshold
         model.save(model_save_path, save_format='tf')
         self.model = keras.models.load_model(model_save_path)
 
-        return score
+        return float(score[1]) # Numpy float values are not serializable by flask
 
     def predict(self, text):
         # TODO: tokenize, build word vectors, and scale

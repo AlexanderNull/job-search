@@ -2,6 +2,7 @@
 .vscode/*
 web-app/build/*
 web-node_modules/*
+server/personal_models/*
 **/.vscode
 __pycache__
 
