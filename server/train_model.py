@@ -7,10 +7,11 @@ from nltk.tokenize import TweetTokenizer
 import numpy
 import pandas
 pandas.options.mode.chained_assignment = None
+import pickle
 import re
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import scale
+from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 tqdm.pandas(desc="progress-bar")
 
@@ -21,6 +22,7 @@ n_dims = 200
 label_key = config['mongo']['data']['label_key']
 embedding_save_path = config['embedding_save_path']
 model_save_path = config['model_save_path']
+scaler_save_path = config['scaler_save_path']
 
 class ModelProvider():
     
@@ -36,15 +38,14 @@ class ModelProvider():
         x_train = self.labelize_jobs(x_train, 'TRAIN')
         x_test = self.labelize_jobs(x_test, 'TEST')
 
-        vectorizer = TfidfVectorizer(analyzer=lambda x: x, min_df=10)
-        matrix = vectorizer.fit_transform([ x.words for x in x_train ]) # Assuming we want the larger vocabulary size, unfortunately won't catch everything new
-        tfidf = dict(zip(vectorizer.get_feature_names(), vectorizer.idf_))
+        tfidf = self.build_tfdif(x_train, 10)
 
-        train_vecs = numpy.concatenate([ self.build_word_vector(tokens, tfidf, n_dims, embedding_keyed_vectors) for tokens in tqdm(map(lambda x: x.words, x_train)) ])
-        train_vecs = scale(train_vecs)
+        train_vecs = self.build_vector_list(x_train, embedding_keyed_vectors, tfidf)
+        test_vecs = self.build_vector_list(x_test, embedding_keyed_vectors, tfidf)
+        scaler = StandardScaler().fit(train_vecs)
 
-        test_vecs = numpy.concatenate([ self.build_word_vector(tokens, tfidf, n_dims, embedding_keyed_vectors) for tokens in tqdm(map(lambda x: x.words, x_test)) ])
-        test_vecs = scale(test_vecs)
+        train_vecs = scaler.transform(train_vecs)
+        test_vecs = scaler.transform(test_vecs)
 
         model = Sequential()
         model.add(Dense(32, activation='relu', input_dim=n_dims))
@@ -57,13 +58,25 @@ class ModelProvider():
 
         # TODO: use config to reject models below certain accuracy threshold
         model.save(model_save_path, save_format='tf')
+        pickle.dump(scaler, open(scaler_save_path, 'wb'))
         self.model = keras.models.load_model(model_save_path)
 
         return float(score[1]) # Numpy float values are not serializable by flask
 
     def predict(self, text):
-        # TODO: tokenize, build word vectors, and scale
-        pass
+        embedding_keyed_vectors = self.get_embedding_vectors()
+        new_test = numpy.array([self.tokenize(text),])
+        new_test = self.labelize_jobs(new_test, 'PREDICT')
+
+        tfidf = self.build_tfdif(new_test, 1)
+        new_vecs = self.build_vector_list(new_test, embedding_keyed_vectors, tfidf)
+
+        scaler = pickle.load(open(scaler_save_path, 'rb'))
+        model = keras.models.load_model(model_save_path)
+
+        prediction = int(model.predict_classes(scaler.transform(new_vecs))[0][0])
+
+        return prediction
 
     # My kingdom for lazy vals and options!!
     def get_embedding_vectors(self):
@@ -107,6 +120,9 @@ class ModelProvider():
             labelized.append(LabeledSentence(v, [label]))
         return labelized
 
+    def build_vector_list(self, labeled_tokens, embedding_keyed_vectors, tfidf):
+        return numpy.concatenate([ self.build_word_vector(tokens, tfidf, n_dims, embedding_keyed_vectors) for tokens in tqdm(map(lambda x: x.words, labeled_tokens)) ])
+
     def build_word_vector(self, tokens, tfidf, size, word_vectors):
         vec = numpy.zeros(size).reshape((1, size))
         count = 0
@@ -122,3 +138,9 @@ class ModelProvider():
 
         return vec
 
+    def build_tfdif(self, labeled_tokens, min_freq):
+        vectorizer = TfidfVectorizer(analyzer=lambda x: x, min_df=min_freq)
+        vectorizer.fit_transform([ x.words for x in labeled_tokens ])
+        tfidf = dict(zip(vectorizer.get_feature_names(), vectorizer.idf_))
+
+        return tfidf

@@ -32,6 +32,13 @@ def trainModel():
     score = model_provider.train_model(labeled_jobs)
     return jsonify({ 'score': score })
 
+@app.route('/api/model/predict', methods=['POST'])
+def predict_text():
+    text = request.get_json()
+    if len(text) > 0:
+        prediction = model_provider.predict(text)
+        return jsonify({ label_key: prediction })
+
 @app.route('/api/jobs/<int:job_id>', methods=['PUT'])
 def updateJob(job_id):
     post_body = request.get_json()
