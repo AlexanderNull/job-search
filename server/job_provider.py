@@ -34,10 +34,11 @@ class JobProvider:
     def get_hiring_posts(self, parent_id, historical_limit):
         posts = []
         hiring_post = self.get_json(f'/item/{parent_id}.json')
-        if not self.is_valid_post(date.fromtimestamp(hiring_post['time']), hiring_post['title'], historical_limit, self.hiring_string):
+        post_date = date.fromtimestamp(hiring_post['time'])
+        if 'deleted' in hiring_post or not self.is_valid_post(post_date, hiring_post['title'], historical_limit, self.hiring_string):
             return None
         else:
-            parent_date = hiring_post['time']
+            print(f'Fetching posts for {post_date}.')
             for i, child_id in enumerate(hiring_post['kids']):
                 # TODO: update this if you intend for concurrent users
                 if self.throttle_group_size is not None:
@@ -47,7 +48,7 @@ class JobProvider:
                 child_post = self.get_json(f'/item/{child_id}.json')
                 # TODO: injestion validation if there's too much junk
                 if child_post is not None and child_post.get('parent') == parent_id:
-                    posts.append(self.parse_post(child_post, parent_date))
+                    posts.append(self.parse_post(child_post, hiring_post['time']))
 
             return posts
 

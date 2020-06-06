@@ -1,8 +1,10 @@
+# from functools import reduce
 from gensim.models import KeyedVectors
 from gensim.models.doc2vec import LabeledSentence
 from tensorflow import keras
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
+from tensorflow.keras.layers import BatchNormalization, Dense, Dropout, LSTM
+from tensorflow.keras.optimizers import Adam
 from nltk.tokenize import TweetTokenizer
 import numpy
 import pandas
@@ -11,54 +13,70 @@ import pickle
 import re
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 tqdm.pandas(desc="progress-bar")
 
 from server.config import config
 
 link_pattern = re.compile('<a href[^<]+</a>')
-n_dims = 200
 label_key = config['mongo']['data']['label_key']
 embedding_save_path = config['embedding_save_path']
 model_save_path = config['model_save_path']
-scaler_save_path = config['scaler_save_path']
+max_seq_length = config['max_sequence_length']
+should_under_sample = config['should_under_sample']
+under_sample_ratio = config['under_sample_ratio']
 
 class ModelProvider():
+
+    n_dims = 200
     
     def __init__(self):
         self._embedding_vectors = None
         self.model = None
 
+    # Turns out I'm kinda picky, this is causing data to be severely skewed and
+    # model is just taking the easy way out and ignoring all 1s
+    def fix_skew(self, frame):
+        if should_under_sample:
+            minority = len(frame[frame[label_key] == 1])
+            return frame.drop(frame[frame[label_key] == 0].sample(len(frame) - minority * under_sample_ratio).index)
+        else:
+            return frame
+
     def train_model(self, labeled_jobs):
         embedding_keyed_vectors = self.get_embedding_vectors()
         df = pandas.DataFrame(labeled_jobs)
         processed_labeled = self.process(df)
+        processed_labeled = self.fix_skew(processed_labeled)
         x_train, x_test, y_train, y_test = train_test_split(numpy.array(processed_labeled['tokens']), numpy.array(processed_labeled[label_key]), test_size=0.2)
         x_train = self.labelize_jobs(x_train, 'TRAIN')
         x_test = self.labelize_jobs(x_test, 'TEST')
 
         tfidf = self.build_tfdif(x_train, 10)
 
-        train_vecs = self.build_vector_list(x_train, embedding_keyed_vectors, tfidf)
-        test_vecs = self.build_vector_list(x_test, embedding_keyed_vectors, tfidf)
-        scaler = StandardScaler().fit(train_vecs)
-
-        train_vecs = scaler.transform(train_vecs)
-        test_vecs = scaler.transform(test_vecs)
+        train_vecs = self.build_vector_list(x_train, embedding_keyed_vectors, tfidf, max_seq_length)
+        test_vecs = self.build_vector_list(x_test, embedding_keyed_vectors, tfidf, max_seq_length)
+        y_train = y_train.astype(float)
+        y_test = y_test.astype(float)
 
         model = Sequential()
-        model.add(Dense(32, activation='relu', input_dim=n_dims))
+        model.add(BatchNormalization())
+        model.add(LSTM(5, input_shape=train_vecs.shape[1:]))
+        model.add(Dropout(0.2))
+        model.add(BatchNormalization())
+        model.add(Dense(32, activation='relu', input_dim=self.n_dims))
+        model.add(Dropout(0.2))
         model.add(Dense(1, activation='sigmoid'))
-        model.compile(optimizer='rmsprop', loss='binary_crossentropy', metrics=['accuracy'])
+        optimizer = Adam(learning_rate = 0.001)
+        model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
 
-        model.fit(train_vecs, y_train, epochs=9, batch_size=32, verbose=2)
-        score = model.evaluate(test_vecs, y_test, batch_size=30, verbose=2)
+        model.fit(train_vecs, y_train, epochs=40, batch_size=5, verbose=2)
+        print(model.summary())
+        score = model.evaluate(test_vecs, y_test, batch_size=5, verbose=2)
         print(f'Model score: {score[1]}')
 
         # TODO: use config to reject models below certain accuracy threshold
         model.save(model_save_path, save_format='tf')
-        pickle.dump(scaler, open(scaler_save_path, 'wb'))
         self.model = keras.models.load_model(model_save_path)
 
         return float(score[1]) # Numpy float values are not serializable by flask
@@ -68,13 +86,13 @@ class ModelProvider():
         new_test = numpy.array([self.tokenize(text),])
         new_test = self.labelize_jobs(new_test, 'PREDICT')
 
-        tfidf = self.build_tfdif(new_test, 1)
-        new_vecs = self.build_vector_list(new_test, embedding_keyed_vectors, tfidf)
+        # TODO: loads should be done less often and have better cleanup. Stop loading for every call.
+        tfidf = pickle.load(open('server/tfidf.pickle', 'rb'))
+        new_vecs = self.build_vector_list(new_test, embedding_keyed_vectors, tfidf, max_seq_length) # todo: limit to length
 
-        scaler = pickle.load(open(scaler_save_path, 'rb'))
         model = keras.models.load_model(model_save_path)
 
-        prediction = int(model.predict_classes(scaler.transform(new_vecs))[0][0])
+        prediction = int(model.predict_classes(new_vecs)[0])
 
         return prediction
 
@@ -120,11 +138,22 @@ class ModelProvider():
             labelized.append(LabeledSentence(v, [label]))
         return labelized
 
-    def build_vector_list(self, labeled_tokens, embedding_keyed_vectors, tfidf):
-        return numpy.concatenate([ self.build_word_vector(tokens, tfidf, n_dims, embedding_keyed_vectors) for tokens in tqdm(map(lambda x: x.words, labeled_tokens)) ])
+    def build_vector_list(self, labeled_tokens, embedding_keyed_vectors, tfidf, sequence_length):
+        vectors = numpy.zeros((len(labeled_tokens), sequence_length, self.n_dims))
+        for i, tokens in tqdm(enumerate(labeled_tokens)):
+            for j, token in enumerate(tokens.words):
+                vectors[i, j] = self.individual_word_vector(token, tfidf, self.n_dims, embedding_keyed_vectors)
+
+        return vectors
+
+    def individual_word_vector(self, token, tfidf, vec_size, word_vectors):
+        try:
+            return word_vectors[token].reshape((vec_size)) * tfidf[token]
+        except KeyError:
+            return numpy.zeros((vec_size))
 
     def build_word_vector(self, tokens, tfidf, size, word_vectors):
-        vec = numpy.zeros(size).reshape((1, size))
+        vec = numpy.zeros((1, size))
         count = 0
         for word in tokens:
             try:

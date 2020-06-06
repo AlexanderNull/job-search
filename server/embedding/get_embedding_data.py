@@ -9,7 +9,7 @@ def get_data():
     client = MongoClient(config['mongo']['host'], config['mongo']['port'])
     jobs_host = config['jobs_firebase_host']
     throttle_group_size = 20
-    throttle_duration = 5
+    throttle_duration = 1
     db_name = config['mongo']['embedding_data']['db_name']
     table_name = config['mongo']['embedding_data']['table_name']
 
@@ -20,7 +20,7 @@ def get_data():
 
     oldest_id, newist_id = db_tools.get_jobs_range(jobs_for_embedding_table)
 
-    new_jobs = job_provider.get_next_post(6, oldest_id, newist_id)
+    new_jobs = job_provider.get_next_post(0, newist_id, newist_id)
 
     if new_jobs is not None:
         jobs_for_embedding_table.insert_many(new_jobs)

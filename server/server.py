@@ -4,7 +4,7 @@ from pymongo import MongoClient
 import requests
 
 from server.config import config
-import server.db_tools
+from server.db_tools import get_jobs_range
 from server.job_provider import JobProvider
 from server.train_model import ModelProvider
 
@@ -18,6 +18,7 @@ throttle_duration = config['throttle_duration']
 db_name = config['mongo']['data']['db_name']
 table_name = config['mongo']['data']['table_name']
 label_key = config['mongo']['data']['label_key']
+sequence_key = "sequence_length"
 
 db = client[db_name]
 jobs_table = db[table_name]
@@ -57,7 +58,7 @@ def getJobs():
     if len(unlabeled_jobs) != 0:
         return jsonify([JobProvider.format_post(x) for x in unlabeled_jobs])
     else:
-        oldest_id, newist_id = db_tools.get_jobs_range(jobs_table)
+        oldest_id, newest_id = get_jobs_range(jobs_table)
         new_jobs = job_provider.get_next_post(historical_limit, oldest_id, newest_id)
         if new_jobs is not None:
             jobs_table.insert_many(new_jobs)
