@@ -29,15 +29,28 @@ model_provider = ModelProvider()
 # TODO: handle error condition of no saved embedding when run if you get around to it
 @app.route('/api/model', methods=['POST'])
 def trainModel():
+    params = request.get_json()
+    max_sequence_length = params.get('max_sequence_length', config['model']['max_sequence_length'])
+    learning_rate = params.get('learning_rate', config['model']['learning_rate'])
+    epochs = params.get('epochs', config['model']['epochs'])
+    batch_size = params.get('batch_size', config['model']['batch_size'])
     labeled_jobs = jobs_table.find({ '$and': [{ 'preferred': { '$exists': True } }, { 'text': { '$exists': True } }] })
-    score = model_provider.train_model(labeled_jobs)
+    score = model_provider.train_model(labeled_jobs, max_sequence_length, learning_rate, epochs, batch_size)
+    return jsonify({ 'score': score })
+
+@app.route('/api/modely', methods=['POST'])
+def trainModely():
+    # labeled_jobs = jobs_table.find({ '$and': [{ 'preferred': { '$exists': True } }, { 'text': { '$exists': True } }] })
+    score = model_provider.fake_model(None)
     return jsonify({ 'score': score })
 
 @app.route('/api/model/predict', methods=['POST'])
 def predict_text():
-    text = request.get_json()
+    params = request.get_json()
+    text = params['text']
+    max_sequence_length = params.get('max_sequence_length', config['model']['max_sequence_length'])
     if len(text) > 0:
-        prediction = model_provider.predict(text)
+        prediction = model_provider.predict(text, max_sequence_length)
         return jsonify({ label_key: prediction })
 
 @app.route('/api/jobs/<int:job_id>', methods=['PUT'])

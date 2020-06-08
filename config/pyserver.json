@@ -21,7 +21,13 @@
     "model_save_path": "server/personal_models/sentiment_model.tf",
     "embedding_save_path": "server/embedding/job_embedding.kv",
     "scaler_save_path": "server/personal_models/vector_scaler.pkl",
-    "max_sequence_length": 750,
-    "should_under_sample": true,
-    "under_sample_ratio": 2
+    "trained_embedding_path": "server/personal_models/GoogleNews-vectors-negative300.bin",
+    "model": {
+        "max_sequence_length": 100,
+        "should_under_sample": true,
+        "under_sample_ratio": 2,
+        "learning_rate": 0.01,
+        "epochs": 100,
+        "batch_size": 10
+    }
 }

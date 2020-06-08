@@ -4,6 +4,7 @@ from gensim.models.doc2vec import LabeledSentence
 from tensorflow import keras
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import BatchNormalization, Dense, Dropout, LSTM
+from tensorflow.keras.optimizers.schedules import ExponentialDecay
 from tensorflow.keras.optimizers import Adam
 from nltk.tokenize import TweetTokenizer
 import numpy
@@ -21,18 +22,21 @@ from server.config import config
 link_pattern = re.compile('<a href[^<]+</a>')
 label_key = config['mongo']['data']['label_key']
 embedding_save_path = config['embedding_save_path']
+trained_embedding_path = config['trained_embedding_path']
 model_save_path = config['model_save_path']
-max_seq_length = config['max_sequence_length']
-should_under_sample = config['should_under_sample']
-under_sample_ratio = config['under_sample_ratio']
+should_under_sample = config['model']['should_under_sample']
+under_sample_ratio = config['model']['under_sample_ratio']
 
 class ModelProvider():
 
     n_dims = 200
+    g_dims = 300
     
     def __init__(self):
         self._embedding_vectors = None
         self.model = None
+        # This one takes a while, calls waiting on it will time out so load at start
+        self.embedding_vectors = KeyedVectors.load_word2vec_format(trained_embedding_path, binary=True)
 
     # Turns out I'm kinda picky, this is causing data to be severely skewed and
     # model is just taking the easy way out and ignoring all 1s
@@ -43,8 +47,53 @@ class ModelProvider():
         else:
             return frame
 
-    def train_model(self, labeled_jobs):
+    def fake_model(self, labeled_jobs):
         embedding_keyed_vectors = self.get_embedding_vectors()
+        df = pandas.DataFrame(numpy.array([
+            ['health job cancer', 1, ['health', 'job', 'cancer']],
+            ['bitcoin master finance', 0, ['bitcoin', 'master', 'finance']],
+            ['healthcare help people', 1, ['healthcare', 'help', 'people']],
+            ['world where healthcare providers', 1, ['world', 'where', 'healthcare', 'providers']],
+            ['passion for building solutions', 0, ['passion', 'for', 'building', 'solutions']],
+            ['remote engineers to help with data mining', 0, ['remote', 'engineers', 'help', 'with', 'data', 'mining']],
+            ['mission to diagnose cancer', 1, ['mission', 'diagnose', 'cancer']],
+            ['allowing healthcare providers to gain unprecedented insights', 1, ['allowing', 'healthcare', 'providers', 'gain', 'unprecedented', 'insights']],
+            ['online sales are skyrocketing', 0, ['online', 'sales', 'skyrocketing']],
+            ['ground floor of a growing business', 0, ['ground', 'floor', 'growing', 'business']],
+            ['show on amazon prime', 0, ['show', 'amazon', 'prime']]
+        ]),
+            columns=['text', 'preferred', 'tokens'])
+        x_train, x_test, y_train, y_test = train_test_split(numpy.array(df['tokens']), numpy.array(df[label_key]), test_size=0.2)
+        x_train = self.labelize_jobs(x_train, 'TRAIN')
+        x_test = self.labelize_jobs(x_test, 'TEST')
+
+        tfidf = self.build_fake_tfidf(x_train, 10)
+
+        train_vecs = self.build_vector_list(x_train, self.embedding_vectors, tfidf, 6)
+        test_vecs = self.build_vector_list(x_test, self.embedding_vectors, tfidf, 6)
+        y_train = y_train.astype(float)
+        y_test = y_test.astype(float)
+
+        model = Sequential()
+        model.add(BatchNormalization())
+        model.add(LSTM(5, input_shape=train_vecs.shape[1:]))
+        model.add(Dropout(0.2))
+        model.add(BatchNormalization())
+        model.add(Dense(32, activation='relu', input_dim=self.g_dims))
+        model.add(Dropout(0.2))
+        model.add(Dense(1, activation='sigmoid'))
+        optimizer = Adam(learning_rate = 0.001)
+        model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
+
+        model.fit(train_vecs, y_train, epochs=40, batch_size=5, verbose=2)
+        print(model.summary())
+        score = model.evaluate(test_vecs, y_test, batch_size=5, verbose=2)
+        print(f'Model score: {score[1]}')
+
+        return float(score[1])
+
+    def train_model(self, labeled_jobs, max_seq_length, learning_rate, epochs, batch_size):
+        embedding_keyed_vectors = self.embedding_vectors
         df = pandas.DataFrame(labeled_jobs)
         processed_labeled = self.process(df)
         processed_labeled = self.fix_skew(processed_labeled)
@@ -63,16 +112,20 @@ class ModelProvider():
         model.add(BatchNormalization())
         model.add(LSTM(5, input_shape=train_vecs.shape[1:]))
         model.add(Dropout(0.2))
-        model.add(BatchNormalization())
-        model.add(Dense(32, activation='relu', input_dim=self.n_dims))
-        model.add(Dropout(0.2))
+        # model.add(BatchNormalization())
+        # model.add(Dense(32, activation='relu', input_dim=self.g_dims))
+        # model.add(Dropout(0.2))
         model.add(Dense(1, activation='sigmoid'))
-        optimizer = Adam(learning_rate = 0.001)
+        lr_scheduler = ExponentialDecay(
+            initial_learning_rate=learning_rate,
+            decay_steps=10000,
+            decay_rate=0.9)
+        optimizer = Adam(learning_rate = lr_scheduler)
         model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
 
-        model.fit(train_vecs, y_train, epochs=40, batch_size=5, verbose=2)
+        model.fit(train_vecs, y_train, epochs=epochs, batch_size=batch_size, verbose=2)
         print(model.summary())
-        score = model.evaluate(test_vecs, y_test, batch_size=5, verbose=2)
+        score = model.evaluate(test_vecs, y_test, batch_size=batch_size, verbose=2)
         print(f'Model score: {score[1]}')
 
         # TODO: use config to reject models below certain accuracy threshold
@@ -81,8 +134,8 @@ class ModelProvider():
 
         return float(score[1]) # Numpy float values are not serializable by flask
 
-    def predict(self, text):
-        embedding_keyed_vectors = self.get_embedding_vectors()
+    def predict(self, text, max_seq_length):
+        embedding_keyed_vectors = self.embedding_vectors
         new_test = numpy.array([self.tokenize(text),])
         new_test = self.labelize_jobs(new_test, 'PREDICT')
 
@@ -139,10 +192,11 @@ class ModelProvider():
         return labelized
 
     def build_vector_list(self, labeled_tokens, embedding_keyed_vectors, tfidf, sequence_length):
-        vectors = numpy.zeros((len(labeled_tokens), sequence_length, self.n_dims))
+        vectors = numpy.zeros((len(labeled_tokens), sequence_length, self.g_dims))
         for i, tokens in tqdm(enumerate(labeled_tokens)):
-            for j, token in enumerate(tokens.words):
-                vectors[i, j] = self.individual_word_vector(token, tfidf, self.n_dims, embedding_keyed_vectors)
+            words = tokens.words
+            for j in range(min(sequence_length, len(words))):
+                vectors[i, j] = self.individual_word_vector(words[j], tfidf, self.g_dims, embedding_keyed_vectors)
 
         return vectors
 
@@ -171,5 +225,13 @@ class ModelProvider():
         vectorizer = TfidfVectorizer(analyzer=lambda x: x, min_df=min_freq)
         vectorizer.fit_transform([ x.words for x in labeled_tokens ])
         tfidf = dict(zip(vectorizer.get_feature_names(), vectorizer.idf_))
+
+        return tfidf
+
+    def build_fake_tfidf(self, labeled_tokens, min_freq):
+        tfidf = {}
+        for rows in labeled_tokens:
+            for word in rows.words:
+                tfidf[word] = 1
 
         return tfidf
