@@ -31,11 +31,12 @@ model_provider = ModelProvider()
 def trainModel():
     params = request.get_json()
     max_sequence_length = params.get('max_sequence_length', config['model']['max_sequence_length'])
+    min_sequence_length = params.get('min_sequence_length', config['model']['min_sequence_length'])
     learning_rate = params.get('learning_rate', config['model']['learning_rate'])
     epochs = params.get('epochs', config['model']['epochs'])
     batch_size = params.get('batch_size', config['model']['batch_size'])
     labeled_jobs = jobs_table.find({ '$and': [{ 'preferred': { '$exists': True } }, { 'text': { '$exists': True } }] })
-    score = model_provider.train_model(labeled_jobs, max_sequence_length, learning_rate, epochs, batch_size)
+    score = model_provider.train_model(labeled_jobs, max_sequence_length, min_sequence_length, learning_rate, epochs, batch_size)
     return jsonify({ 'score': score })
 
 @app.route('/api/modely', methods=['POST'])

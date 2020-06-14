@@ -18,14 +18,17 @@ from tqdm import tqdm
 tqdm.pandas(desc="progress-bar")
 
 from server.config import config
+from server.synthesize import synthesize
 
-link_pattern = re.compile('<a href[^<]+</a>')
-label_key = config['mongo']['data']['label_key']
-embedding_save_path = config['embedding_save_path']
-trained_embedding_path = config['trained_embedding_path']
-model_save_path = config['model_save_path']
-should_under_sample = config['model']['should_under_sample']
-under_sample_ratio = config['model']['under_sample_ratio']
+LINK_PATTERN = re.compile('<a href[^<]+</a>')
+NOISE_PATTERN = re.compile('^\W$')
+LABEL_KEY = config['mongo']['data']['label_key']
+EMBEDDING_SAVE_PATH = config['embedding_save_path']
+TRAINED_EMBEDDING_PATH = config['trained_embedding_path']
+MODEL_SAVE_PATH = config['model_save_path']
+SHOULD_UNDER_SAMPLE = config['model']['should_under_sample']
+UNDER_SAMPLE_RATIO = config['model']['under_sample_ratio']
+END_OF_SENTENCE = config['end_of_sentence']
 
 class ModelProvider():
 
@@ -36,14 +39,22 @@ class ModelProvider():
         self._embedding_vectors = None
         self.model = None
         # This one takes a while, calls waiting on it will time out so load at start
-        self.embedding_vectors = KeyedVectors.load_word2vec_format(trained_embedding_path, binary=True)
+        self.embedding_vectors = KeyedVectors.load_word2vec_format(TRAINED_EMBEDDING_PATH, binary=True) # TODO: keep this one for prod
+        # self.embedding_vectors = KeyedVectors.load(EMBEDDING_SAVE_PATH)
 
     # Turns out I'm kinda picky, this is causing data to be severely skewed and
     # model is just taking the easy way out and ignoring all 1s
     def fix_skew(self, frame):
-        if should_under_sample:
-            minority = len(frame[frame[label_key] == 1])
-            return frame.drop(frame[frame[label_key] == 0].sample(len(frame) - minority * under_sample_ratio).index)
+        if SHOULD_UNDER_SAMPLE:
+            # TODO: take positive features
+            # pass ['tokens'] to synthesize
+            # add on to frame with label of 1
+            minority = frame[frame[LABEL_KEY] == 1]
+            synthetic = pandas.Series(synthesize(minority['tokens']))
+            synthetic = pandas.DataFrame(synthetic, columns=['tokens'])
+            synthetic[LABEL_KEY] = 1
+            under_sampled = frame.drop(frame[frame[LABEL_KEY] == 0].sample(len(frame) - (2 * len(minority)) - len(synthetic)).index)
+            return under_sampled.append(synthetic, ignore_index=True)
         else:
             return frame
 
@@ -63,7 +74,7 @@ class ModelProvider():
             ['show on amazon prime', 0, ['show', 'amazon', 'prime']]
         ]),
             columns=['text', 'preferred', 'tokens'])
-        x_train, x_test, y_train, y_test = train_test_split(numpy.array(df['tokens']), numpy.array(df[label_key]), test_size=0.2)
+        x_train, x_test, y_train, y_test = train_test_split(numpy.array(df['tokens']), numpy.array(df[LABEL_KEY]), test_size=0.2)
         x_train = self.labelize_jobs(x_train, 'TRAIN')
         x_test = self.labelize_jobs(x_test, 'TEST')
 
@@ -92,12 +103,12 @@ class ModelProvider():
 
         return float(score[1])
 
-    def train_model(self, labeled_jobs, max_seq_length, learning_rate, epochs, batch_size):
+    def train_model(self, labeled_jobs, max_seq_length, min_sequence_length, learning_rate, epochs, batch_size):
         embedding_keyed_vectors = self.embedding_vectors
         df = pandas.DataFrame(labeled_jobs)
-        processed_labeled = self.process(df)
+        processed_labeled = self.process(df, min_sequence_length)
         processed_labeled = self.fix_skew(processed_labeled)
-        x_train, x_test, y_train, y_test = train_test_split(numpy.array(processed_labeled['tokens']), numpy.array(processed_labeled[label_key]), test_size=0.2)
+        x_train, x_test, y_train, y_test = train_test_split(numpy.array(processed_labeled['tokens']), numpy.array(processed_labeled[LABEL_KEY]), test_size=0.2)
         x_train = self.labelize_jobs(x_train, 'TRAIN')
         x_test = self.labelize_jobs(x_test, 'TEST')
 
@@ -129,8 +140,8 @@ class ModelProvider():
         print(f'Model score: {score[1]}')
 
         # TODO: use config to reject models below certain accuracy threshold
-        model.save(model_save_path, save_format='tf')
-        self.model = keras.models.load_model(model_save_path)
+        model.save(MODEL_SAVE_PATH, save_format='tf')
+        self.model = keras.models.load_model(MODEL_SAVE_PATH)
 
         return float(score[1]) # Numpy float values are not serializable by flask
 
@@ -143,7 +154,7 @@ class ModelProvider():
         tfidf = pickle.load(open('server/tfidf.pickle', 'rb'))
         new_vecs = self.build_vector_list(new_test, embedding_keyed_vectors, tfidf, max_seq_length) # todo: limit to length
 
-        model = keras.models.load_model(model_save_path)
+        model = keras.models.load_model(MODEL_SAVE_PATH)
 
         prediction = int(model.predict_classes(new_vecs)[0])
 
@@ -152,33 +163,41 @@ class ModelProvider():
     # My kingdom for lazy vals and options!!
     def get_embedding_vectors(self):
         if self._embedding_vectors == None:
-            self._embedding_vectors = KeyedVectors.load(embedding_save_path)
+            self._embedding_vectors = KeyedVectors.load(EMBEDDING_SAVE_PATH)
         
         return self._embedding_vectors
     
 
     def tokenize(self, job):
         job = job.lower()
-        job = link_pattern.sub('', job)
+        job = LINK_PATTERN.sub('', job)
         job = (
             job.replace('<p>', '')
             .replace('&#x27;', "'")
             .replace('&quot;', '"')
-            .replace('|', '')
         )
         tokenizer = TweetTokenizer()
         tokens = tokenizer.tokenize(job)
-        tokens = list(filter(lambda t: not t.startswith('@'), tokens))
-        tokens = list(filter(lambda t: not t.startswith('#'), tokens))
+        tokens = [ t if t != '.' else END_OF_SENTENCE for t in tokens ] # For synthetic data shuffling
+        tokens = [ t for t in tokens if self.should_keep_token(t) ]
         return tokens
 
-    def process(self, data):
+    def should_keep_token(self, token):
+        return (
+            re.match(NOISE_PATTERN, token) == None and
+            not token.startswith('@') and
+            not token.startswith('#')
+        )
+
+    def process(self, data, min_length):
         data.drop(['_id', 'by', 'id', 'parent', 'date'], axis=1, inplace=True)
         data = data[data['text'].isnull() == False]
         data = data[data['preferred'].isnull() == False]
-        data[label_key] = data[label_key].map(lambda x: 1 if x else 0)
+        data[LABEL_KEY] = data[LABEL_KEY].map(lambda x: 1 if x else 0)
         data['tokens'] = data['text'].progress_map(self.tokenize)
         data = data[data.tokens != 'NC']
+        data = data[data.tokens.apply(lambda x: len(x) > min_length)]
+        data.drop(['text'], axis=1, inplace=True)
         data.reset_index(inplace=True)
         data.drop('index', axis=1, inplace=True)
         return data

@@ -18,14 +18,17 @@
     "throttle_duration": 1,
     "whos_hiring_user": "whoishiring",
     "whos_hiring_search_string":  "ho is hiring?",
+    "end_of_sentence": "<EOS>",
     "model_save_path": "server/personal_models/sentiment_model.tf",
     "embedding_save_path": "server/embedding/job_embedding.kv",
     "scaler_save_path": "server/personal_models/vector_scaler.pkl",
     "trained_embedding_path": "server/personal_models/GoogleNews-vectors-negative300.bin",
     "model": {
         "max_sequence_length": 100,
+        "min_sequence_length": 20,
         "should_under_sample": true,
-        "under_sample_ratio": 2,
+        "under_sample_ratio": 1,
+        "synthetic_ratio": 2,
         "learning_rate": 0.01,
         "epochs": 100,
         "batch_size": 10
