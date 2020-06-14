@@ -46,9 +46,6 @@ class ModelProvider():
     # model is just taking the easy way out and ignoring all 1s
     def fix_skew(self, frame):
         if SHOULD_UNDER_SAMPLE:
-            # TODO: take positive features
-            # pass ['tokens'] to synthesize
-            # add on to frame with label of 1
             minority = frame[frame[LABEL_KEY] == 1]
             synthetic = pandas.Series(synthesize(minority['tokens']))
             synthetic = pandas.DataFrame(synthetic, columns=['tokens'])
@@ -57,51 +54,6 @@ class ModelProvider():
             return under_sampled.append(synthetic, ignore_index=True)
         else:
             return frame
-
-    def fake_model(self, labeled_jobs):
-        embedding_keyed_vectors = self.get_embedding_vectors()
-        df = pandas.DataFrame(numpy.array([
-            ['health job cancer', 1, ['health', 'job', 'cancer']],
-            ['bitcoin master finance', 0, ['bitcoin', 'master', 'finance']],
-            ['healthcare help people', 1, ['healthcare', 'help', 'people']],
-            ['world where healthcare providers', 1, ['world', 'where', 'healthcare', 'providers']],
-            ['passion for building solutions', 0, ['passion', 'for', 'building', 'solutions']],
-            ['remote engineers to help with data mining', 0, ['remote', 'engineers', 'help', 'with', 'data', 'mining']],
-            ['mission to diagnose cancer', 1, ['mission', 'diagnose', 'cancer']],
-            ['allowing healthcare providers to gain unprecedented insights', 1, ['allowing', 'healthcare', 'providers', 'gain', 'unprecedented', 'insights']],
-            ['online sales are skyrocketing', 0, ['online', 'sales', 'skyrocketing']],
-            ['ground floor of a growing business', 0, ['ground', 'floor', 'growing', 'business']],
-            ['show on amazon prime', 0, ['show', 'amazon', 'prime']]
-        ]),
-            columns=['text', 'preferred', 'tokens'])
-        x_train, x_test, y_train, y_test = train_test_split(numpy.array(df['tokens']), numpy.array(df[LABEL_KEY]), test_size=0.2)
-        x_train = self.labelize_jobs(x_train, 'TRAIN')
-        x_test = self.labelize_jobs(x_test, 'TEST')
-
-        tfidf = self.build_fake_tfidf(x_train, 10)
-
-        train_vecs = self.build_vector_list(x_train, self.embedding_vectors, tfidf, 6)
-        test_vecs = self.build_vector_list(x_test, self.embedding_vectors, tfidf, 6)
-        y_train = y_train.astype(float)
-        y_test = y_test.astype(float)
-
-        model = Sequential()
-        model.add(BatchNormalization())
-        model.add(LSTM(5, input_shape=train_vecs.shape[1:]))
-        model.add(Dropout(0.2))
-        model.add(BatchNormalization())
-        model.add(Dense(32, activation='relu', input_dim=self.g_dims))
-        model.add(Dropout(0.2))
-        model.add(Dense(1, activation='sigmoid'))
-        optimizer = Adam(learning_rate = 0.001)
-        model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
-
-        model.fit(train_vecs, y_train, epochs=40, batch_size=5, verbose=2)
-        print(model.summary())
-        score = model.evaluate(test_vecs, y_test, batch_size=5, verbose=2)
-        print(f'Model score: {score[1]}')
-
-        return float(score[1])
 
     def train_model(self, labeled_jobs, max_seq_length, min_sequence_length, learning_rate, epochs, batch_size):
         embedding_keyed_vectors = self.embedding_vectors
@@ -244,13 +196,5 @@ class ModelProvider():
         vectorizer = TfidfVectorizer(analyzer=lambda x: x, min_df=min_freq)
         vectorizer.fit_transform([ x.words for x in labeled_tokens ])
         tfidf = dict(zip(vectorizer.get_feature_names(), vectorizer.idf_))
-
-        return tfidf
-
-    def build_fake_tfidf(self, labeled_tokens, min_freq):
-        tfidf = {}
-        for rows in labeled_tokens:
-            for word in rows.words:
-                tfidf[word] = 1
 
         return tfidf

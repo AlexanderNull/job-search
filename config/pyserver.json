@@ -28,7 +28,6 @@
         "min_sequence_length": 20,
         "should_under_sample": true,
         "under_sample_ratio": 1,
-        "synthetic_ratio": 2,
         "learning_rate": 0.01,
         "epochs": 100,
         "batch_size": 10

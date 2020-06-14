@@ -39,12 +39,6 @@ def trainModel():
     score = model_provider.train_model(labeled_jobs, max_sequence_length, min_sequence_length, learning_rate, epochs, batch_size)
     return jsonify({ 'score': score })
 
-@app.route('/api/modely', methods=['POST'])
-def trainModely():
-    # labeled_jobs = jobs_table.find({ '$and': [{ 'preferred': { '$exists': True } }, { 'text': { '$exists': True } }] })
-    score = model_provider.fake_model(None)
-    return jsonify({ 'score': score })
-
 @app.route('/api/model/predict', methods=['POST'])
 def predict_text():
     params = request.get_json()
@@ -79,11 +73,6 @@ def getJobs():
             return jsonify([JobProvider.format_post(x) for x in new_jobs])
         else:
             abort(404)
-
-@app.route('/api/jobs/<id>', methods=['PUT'])
-def labelJob(id):
-    # TODO: use provided id to determine which record to update, apply match criteria to record
-    pass
 
 @app.route('/', defaults={'path': 'index.html'})
 @app.route('/<path:path>')
