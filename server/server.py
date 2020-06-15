@@ -18,10 +18,12 @@ throttle_duration = config['throttle_duration']
 db_name = config['mongo']['data']['db_name']
 table_name = config['mongo']['data']['table_name']
 label_key = config['mongo']['data']['label_key']
+settings_table_name = config['mongo']['settings']['table_name']
 sequence_key = "sequence_length"
 
 db = client[db_name]
 jobs_table = db[table_name]
+settings_table = db[settings_table_name]
 
 job_provider = JobProvider(jobs_host, throttle_group_size, throttle_duration)
 model_provider = ModelProvider()
@@ -30,23 +32,28 @@ model_provider = ModelProvider()
 @app.route('/api/model', methods=['POST'])
 def trainModel():
     params = request.get_json()
-    max_sequence_length = params.get('max_sequence_length', config['model']['max_sequence_length'])
-    min_sequence_length = params.get('min_sequence_length', config['model']['min_sequence_length'])
-    learning_rate = params.get('learning_rate', config['model']['learning_rate'])
-    epochs = params.get('epochs', config['model']['epochs'])
-    batch_size = params.get('batch_size', config['model']['batch_size'])
     labeled_jobs = jobs_table.find({ '$and': [{ 'preferred': { '$exists': True } }, { 'text': { '$exists': True } }] })
-    score = model_provider.train_model(labeled_jobs, max_sequence_length, min_sequence_length, learning_rate, epochs, batch_size)
+    score, trained_sequence_length = model_provider.train_model(labeled_jobs, params)
+    settings_table.update_one({ 'key': sequence_key }, { 'key': sequence_key, 'value': trained_sequence_length}, upsert=True)
     return jsonify({ 'score': score })
 
 @app.route('/api/model/predict', methods=['POST'])
 def predict_text():
     params = request.get_json()
     text = params['text']
-    max_sequence_length = params.get('max_sequence_length', config['model']['max_sequence_length'])
+    max_sequence_length = int(settings_table.find_one({ 'key': sequence_key })['value'])
     if len(text) > 0:
         prediction = model_provider.predict(text, max_sequence_length)
         return jsonify({ label_key: prediction })
+
+@app.route('/api/model/predictbulk', methods=['POST'])
+def predict_bulk():
+    jobs = request.get_json()
+    jobs = [ job for job in jobs if len(job.get('text', '')) > 0 ]
+    max_sequence_length = int(settings_table.find_one({ 'key': sequence_key })['value'])
+    if len(jobs) > 0:
+        predictions = model_provider.predict_bulk(jobs, max_sequence_length)
+        return jsonify(predictions)
 
 @app.route('/api/jobs/<int:job_id>', methods=['PUT'])
 def updateJob(job_id):

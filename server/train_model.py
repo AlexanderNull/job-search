@@ -30,17 +30,16 @@ SHOULD_UNDER_SAMPLE = config['model']['should_under_sample']
 UNDER_SAMPLE_RATIO = config['model']['under_sample_ratio']
 END_OF_SENTENCE = config['end_of_sentence']
 
-class ModelProvider():
-
-    n_dims = 200
-    g_dims = 300
-    
+class ModelProvider():    
     def __init__(self):
         self._embedding_vectors = None
         self.model = None
-        # This one takes a while, calls waiting on it will time out so load at start
-        self.embedding_vectors = KeyedVectors.load_word2vec_format(TRAINED_EMBEDDING_PATH, binary=True) # TODO: keep this one for prod
-        # self.embedding_vectors = KeyedVectors.load(EMBEDDING_SAVE_PATH)
+        self.tfidf = None
+
+        # This one takes a while, calls waiting on it will time out so load at start, custom model might not exist so lazy load
+        if config['use_google_embedding']:
+            self.embedding_vectors = KeyedVectors.load_word2vec_format(TRAINED_EMBEDDING_PATH, binary=True)
+            self.n_dims = 300
 
     # Turns out I'm kinda picky, this is causing data to be severely skewed and
     # model is just taking the easy way out and ignoring all 1s
@@ -55,10 +54,19 @@ class ModelProvider():
         else:
             return frame
 
-    def train_model(self, labeled_jobs, max_seq_length, min_sequence_length, learning_rate, epochs, batch_size):
-        embedding_keyed_vectors = self.embedding_vectors
+    def train_model(self, labeled_jobs, params = {}):
+        min_sequence_length = params.get('min_sequence_length', config['model']['min_sequence_length'])
+        max_sequence_length = params.get('max_sequence_length', config['model']['max_sequence_length'])
+        learning_rate = params.get('learning_rate', config['model']['learning_rate'])
+        epochs = params.get('epochs', config['model']['epochs'])
+        batch_size = params.get('batch_size', config['model']['batch_size'])
+        lstm_dims = params.get('lstm_dims', config['model']['lstm_dims'])
+        include_relu_layer = params.get('include_relu_layer', config['model']['include_relu_layer'])
+        relu_dims = params.get('relu_dims', config['model']['relu_dims'])
+            
+        embedding_keyed_vectors = self.get_embedding_vectors()
         df = pandas.DataFrame(labeled_jobs)
-        processed_labeled = self.process(df, min_sequence_length)
+        processed_labeled = self.process(df, params.get('min_sequence_length', config['model']['min_sequence_length']))
         processed_labeled = self.fix_skew(processed_labeled)
         x_train, x_test, y_train, y_test = train_test_split(numpy.array(processed_labeled['tokens']), numpy.array(processed_labeled[LABEL_KEY]), test_size=0.2)
         x_train = self.labelize_jobs(x_train, 'TRAIN')
@@ -66,18 +74,15 @@ class ModelProvider():
 
         tfidf = self.build_tfdif(x_train, 10)
 
-        train_vecs = self.build_vector_list(x_train, embedding_keyed_vectors, tfidf, max_seq_length)
-        test_vecs = self.build_vector_list(x_test, embedding_keyed_vectors, tfidf, max_seq_length)
+        train_vecs = self.build_vector_list(x_train, embedding_keyed_vectors, tfidf, max_sequence_length)
+        test_vecs = self.build_vector_list(x_test, embedding_keyed_vectors, tfidf, max_sequence_length)
         y_train = y_train.astype(float)
         y_test = y_test.astype(float)
 
         model = Sequential()
         model.add(BatchNormalization())
-        model.add(LSTM(5, input_shape=train_vecs.shape[1:]))
+        model.add(LSTM(lstm_dims, input_shape=train_vecs.shape[1:]))
         model.add(Dropout(0.2))
-        # model.add(BatchNormalization())
-        # model.add(Dense(32, activation='relu', input_dim=self.g_dims))
-        # model.add(Dropout(0.2))
         model.add(Dense(1, activation='sigmoid'))
         lr_scheduler = ExponentialDecay(
             initial_learning_rate=learning_rate,
@@ -95,16 +100,14 @@ class ModelProvider():
         model.save(MODEL_SAVE_PATH, save_format='tf')
         self.model = keras.models.load_model(MODEL_SAVE_PATH)
 
-        return float(score[1]) # Numpy float values are not serializable by flask
+        return float(score[1]), int(max_sequence_length) # Numpy float values are not serializable by flask
 
-    def predict(self, text, max_seq_length):
-        embedding_keyed_vectors = self.embedding_vectors
+    def predict(self, text, max_sequence_length):
+        embedding_keyed_vectors = self.get_embedding_vectors()
         new_test = numpy.array([self.tokenize(text),])
         new_test = self.labelize_jobs(new_test, 'PREDICT')
-
-        # TODO: loads should be done less often and have better cleanup. Stop loading for every call.
-        tfidf = pickle.load(open('server/tfidf.pickle', 'rb'))
-        new_vecs = self.build_vector_list(new_test, embedding_keyed_vectors, tfidf, max_seq_length) # todo: limit to length
+        tfidf = self.get_tfidf()
+        new_vecs = self.build_vector_list(new_test, embedding_keyed_vectors, tfidf, max_sequence_length)
 
         model = keras.models.load_model(MODEL_SAVE_PATH)
 
@@ -112,13 +115,36 @@ class ModelProvider():
 
         return prediction
 
+    def predict_bulk(self, jobs, max_sequence_length):
+        embedding_keyed_vectors = self.get_embedding_vectors()
+        new_test = numpy.array([ self.tokenize(job['text']) for job in jobs ])
+        new_test = self.labelize_jobs(new_test, 'PREDICT')
+        tfidf = self.get_tfidf()
+        new_vecs = self.build_vector_list(new_test, embedding_keyed_vectors, tfidf, max_sequence_length)
+
+        model = keras.models.load_model(MODEL_SAVE_PATH)
+        
+        predictions = model.predict_classes(new_vecs)
+        
+        return [ { LABEL_KEY: int(p), 'id': jobs[i]['id'] } for i, p in enumerate(predictions) ]
+
     # My kingdom for lazy vals and options!!
     def get_embedding_vectors(self):
-        if self._embedding_vectors == None:
-            self._embedding_vectors = KeyedVectors.load(EMBEDDING_SAVE_PATH)
+        if self.embedding_vectors == None:
+            if config['use_google_embedding']:
+                self.embedding_vectors = KeyedVectors.load_word2vec_format(TRAINED_EMBEDDING_PATH, binary=True)
+                self.n_dims = 300
+            else:
+                self.embedding_vectors = KeyedVectors.load(EMBEDDING_SAVE_PATH)
+                self.n_dims = 200
         
-        return self._embedding_vectors
-    
+        return self.embedding_vectors
+
+    def get_tfidf(self):
+        if self.tfidf == None:
+            self.tfidf = pickle.load(open(config['tfidf_save_path'], 'rb'))
+        
+        return self.tfidf
 
     def tokenize(self, job):
         job = job.lower()
@@ -163,11 +189,11 @@ class ModelProvider():
         return labelized
 
     def build_vector_list(self, labeled_tokens, embedding_keyed_vectors, tfidf, sequence_length):
-        vectors = numpy.zeros((len(labeled_tokens), sequence_length, self.g_dims))
+        vectors = numpy.zeros((len(labeled_tokens), sequence_length, self.n_dims))
         for i, tokens in tqdm(enumerate(labeled_tokens)):
             words = tokens.words
             for j in range(min(sequence_length, len(words))):
-                vectors[i, j] = self.individual_word_vector(words[j], tfidf, self.g_dims, embedding_keyed_vectors)
+                vectors[i, j] = self.individual_word_vector(words[j], tfidf, self.n_dims, embedding_keyed_vectors)
 
         return vectors
 
