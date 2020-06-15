@@ -3,7 +3,6 @@ from server.config import config
 
 END_OF_SENTENCE = config['end_of_sentence']
 
-# TODO: get some private going
 def synthesize(series, max_splits = 2):
     grouped = [ group_sentences(tokens, max_splits) for tokens in series ]
     expanded = []
