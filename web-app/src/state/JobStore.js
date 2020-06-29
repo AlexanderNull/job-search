@@ -1,11 +1,23 @@
 import {action, observable} from 'mobx';
 
-const serverUrl = 'http://localhost:5000'
+const serverUrl = 'http://localhost:5000';
+
+const ROUTES = {
+    HOME: 'Home',
+    LABEL: 'Label Older Jobs',
+    PREDICT: 'Predict Jobs',
+    PREFERRED: 'Previously Preferred',
+};
 
 const jobStore = observable({
     nextJob: null,
     prevJobs: [],
     jobs: [],
+    activeRoute: ROUTES.HOME,
+    predictMonth: null,
+    loadingPredictions: false,
+    preferredPredictions: [],
+    monthPosts: [],
 });
 
 // TODO: need a loader here, pulling everything from a month takes a minute or two
@@ -72,4 +84,37 @@ jobStore.goBack = action(function () {
     }
 });
 
+jobStore.setRoute = action(function (route) {
+    if (route === 'PREDICT' && jobStore.monthPosts.length === []) {
+        jobStore.getMonths();
+    }
+    jobStore.activeRoute = route;
+});
+
+jobStore.getMonths = action(async function () {
+    const monthsCall = await fetch(`${serverUrl}/api/jobs/recentMonths`);
+
+    if (monthsCall.status === 200) {
+        jobStore.monthPosts = await monthsCall.json();
+    }
+});
+
+jobStore.setPredictMonth = action(function (postId) {
+    jobStore.predictMonth = postId;
+    if (postId != null) {
+        jobStore.loadingPredictions = true;
+        jobStore.getPredictions(postId);
+    }
+});
+
+jobStore.getPredictions = action(async function (postId) {
+    const predictionsCall = await fetch(`${serverUrl}/api/jobs/predictChildren/${postId}`);
+    
+    if (predictionsCall.status === 200) {
+        jobStore.preferredPredictions = await predictionsCall.json();
+        jobStore.loadingPredictions = false;
+    }
+})
+
+export {ROUTES};
 export default jobStore;

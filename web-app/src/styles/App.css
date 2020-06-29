@@ -55,3 +55,8 @@
 .App-link {
   color: #61dafb;
 }
+
+nav {
+  display: flex;
+}
+
