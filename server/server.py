@@ -33,9 +33,9 @@ model_provider = ModelProvider()
 def trainModel():
     params = request.get_json()
     labeled_jobs = jobs_table.find({ '$and': [{ 'preferred': { '$exists': True } }, { 'text': { '$exists': True } }] })
-    score, trained_sequence_length = model_provider.train_model(labeled_jobs, params)
-    settings_table.update_one({ 'key': sequence_key }, { 'key': sequence_key, 'value': trained_sequence_length}, upsert=True)
-    return jsonify({ 'score': score })
+    score, train_history, trained_sequence_length = model_provider.train_model(labeled_jobs, params)
+    settings_table.update({ 'key': sequence_key }, { 'key': sequence_key, 'value': trained_sequence_length }, upsert=True)
+    return jsonify({ 'score': float(score), 'history': convert_history(train_history) })
 
 @app.route('/api/model/predict', methods=['POST'])
 def predict_text():
@@ -86,3 +86,10 @@ def getJobs():
 def reactApp(path):
     if path != '' and os.path.exists(app.static_folder + '/' + path):
         return send_from_directory(app.static_folder, path)
+
+
+def convert_history(history):
+    return { metric: convert_metric(history, metric) for metric in ['loss', 'val_loss', 'accuracy', 'val_accuracy'] }
+
+def convert_metric(history, metric):
+    return [ float(x) for x in history.get(metric, []) ]

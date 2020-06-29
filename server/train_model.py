@@ -5,7 +5,8 @@ from tensorflow import keras
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import BatchNormalization, Dense, Dropout, LSTM
 from tensorflow.keras.optimizers.schedules import ExponentialDecay
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers import Adam, Nadam, SGD
+from matplotlib import pyplot
 from nltk.tokenize import TweetTokenizer
 import numpy
 import pandas
@@ -40,13 +41,17 @@ class ModelProvider():
         if config['use_google_embedding']:
             self.embedding_vectors = KeyedVectors.load_word2vec_format(TRAINED_EMBEDDING_PATH, binary=True)
             self.n_dims = 300
+        else:
+            # lazy load
+            self.embedding_vectors = None
+            self.n_dims = None
 
     # Turns out I'm kinda picky, this is causing data to be severely skewed and
     # model is just taking the easy way out and ignoring all 1s
-    def fix_skew(self, frame):
+    def fix_skew(self, frame, synthesize_factor):
         if SHOULD_UNDER_SAMPLE:
             minority = frame[frame[LABEL_KEY] == 1]
-            synthetic = pandas.Series(synthesize(minority['tokens']))
+            synthetic = pandas.Series(synthesize(minority['tokens'], synthesize_factor))
             synthetic = pandas.DataFrame(synthetic, columns=['tokens'])
             synthetic[LABEL_KEY] = 1
             under_sampled = frame.drop(frame[frame[LABEL_KEY] == 0].sample(len(frame) - (2 * len(minority)) - len(synthetic)).index)
@@ -60,19 +65,24 @@ class ModelProvider():
         learning_rate = params.get('learning_rate', config['model']['learning_rate'])
         epochs = params.get('epochs', config['model']['epochs'])
         batch_size = params.get('batch_size', config['model']['batch_size'])
-        lstm_dims = params.get('lstm_dims', config['model']['lstm_dims'])
-        include_relu_layer = params.get('include_relu_layer', config['model']['include_relu_layer'])
-        relu_dims = params.get('relu_dims', config['model']['relu_dims'])
+        lstm_units = params.get('lstm_units', config['model']['lstm_units'])
+        lstm_layers = params.get('lstm_layers', config['model']['lstm_layers'])
+        use_tfidf = params.get('use_tfidf', config['model']['use_tfidf'])
+        dropout = params.get('dropout', config['model']['dropout'])
+        test_split = params.get('test_split', config['model']['test_split'])
+        dev_split = params.get('dev_split', config['model']['dev_split'])
+        synthesize_factor = params.get('synthesize_factor', config['model']['synthesize_factor'])
+        use_amsgrad = params.get('use_amsgrad', config['model']['use_amsgrad'])
             
         embedding_keyed_vectors = self.get_embedding_vectors()
         df = pandas.DataFrame(labeled_jobs)
         processed_labeled = self.process(df, params.get('min_sequence_length', config['model']['min_sequence_length']))
-        processed_labeled = self.fix_skew(processed_labeled)
-        x_train, x_test, y_train, y_test = train_test_split(numpy.array(processed_labeled['tokens']), numpy.array(processed_labeled[LABEL_KEY]), test_size=0.2)
+        processed_labeled = self.fix_skew(processed_labeled, synthesize_factor)
+        x_train, x_test, y_train, y_test = train_test_split(numpy.array(processed_labeled['tokens']), numpy.array(processed_labeled[LABEL_KEY]), test_size=test_split)
         x_train = self.labelize_jobs(x_train, 'TRAIN')
         x_test = self.labelize_jobs(x_test, 'TEST')
 
-        tfidf = self.build_tfdif(x_train, 10)
+        tfidf = self.build_tfdif(x_train, 10) if use_tfidf else None
 
         train_vecs = self.build_vector_list(x_train, embedding_keyed_vectors, tfidf, max_sequence_length)
         test_vecs = self.build_vector_list(x_test, embedding_keyed_vectors, tfidf, max_sequence_length)
@@ -80,18 +90,19 @@ class ModelProvider():
         y_test = y_test.astype(float)
 
         model = Sequential()
-        model.add(BatchNormalization())
-        model.add(LSTM(lstm_dims, input_shape=train_vecs.shape[1:]))
-        model.add(Dropout(0.2))
+        model.add(LSTM(lstm_units, input_shape=train_vecs.shape[1:], return_sequences=(lstm_layers > 1)))
+        model.add(Dropout(dropout))
+        for _ in range(max(0, lstm_layers - 2)):
+            model.add(LSTM(lstm_units, return_sequences=True))
+            model.add(Dropout(dropout))
+        if lstm_layers > 1:
+            model.add(LSTM(lstm_units))
+            model.add(Dropout(dropout))
         model.add(Dense(1, activation='sigmoid'))
-        lr_scheduler = ExponentialDecay(
-            initial_learning_rate=learning_rate,
-            decay_steps=10000,
-            decay_rate=0.9)
-        optimizer = Adam(learning_rate = lr_scheduler)
-        model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
+        opt = Adam(learning_rate = learning_rate, amsgrad=use_amsgrad)
+        model.compile(optimizer=opt, loss='binary_crossentropy', metrics=['accuracy'])
 
-        model.fit(train_vecs, y_train, epochs=epochs, batch_size=batch_size, verbose=2)
+        history = model.fit(train_vecs, y_train, epochs=epochs, batch_size=batch_size, validation_split=dev_split, verbose=2)
         print(model.summary())
         score = model.evaluate(test_vecs, y_test, batch_size=batch_size, verbose=2)
         print(f'Model score: {score[1]}')
@@ -100,7 +111,7 @@ class ModelProvider():
         model.save(MODEL_SAVE_PATH, save_format='tf')
         self.model = keras.models.load_model(MODEL_SAVE_PATH)
 
-        return float(score[1]), int(max_sequence_length) # Numpy float values are not serializable by flask
+        return score[1], history.history, max_sequence_length # Numpy float values are not serializable by flask
 
     def predict(self, text, max_sequence_length):
         embedding_keyed_vectors = self.get_embedding_vectors()
@@ -197,9 +208,12 @@ class ModelProvider():
 
         return vectors
 
+    def tfidf_lookup(self, tfidf, token):
+        return 1 if tfidf is None else tfidf[token]
+
     def individual_word_vector(self, token, tfidf, vec_size, word_vectors):
         try:
-            return word_vectors[token].reshape((vec_size)) * tfidf[token]
+            return word_vectors[token].reshape((vec_size)) * self.tfidf_lookup(tfidf, token)
         except KeyError:
             return numpy.zeros((vec_size))
 
@@ -208,7 +222,7 @@ class ModelProvider():
         count = 0
         for word in tokens:
             try:
-                vec += word_vectors[word].reshape((1, size)) * tfidf[word]
+                vec += word_vectors[word].reshape((1, size)) * self.tfidf_lookup(tfidf, word)
                 count += 1
             except KeyError:
                 continue

@@ -34,8 +34,15 @@
         "should_under_sample": true,
         "under_sample_ratio": 1,
         "learning_rate": 0.0001,
-        "epochs": 200,
-        "batch_size": 16,
-        "lstm_dims": 100
+        "epochs": 100,
+        "batch_size": 8,
+        "lstm_units": 8,
+        "lstm_layers": 1,
+        "use_tfidf": true,
+        "dropout": 0.2,
+        "dev_split": 0.2,
+        "test_split": 0.2,
+        "synthesize_factor": 2,
+        "use_amsgrad": true
     }
 }
