@@ -3,9 +3,10 @@ import os
 from pymongo import MongoClient
 import requests
 
-from config import config
-import db_tools
-from job_provider import JobProvider
+from server.config import config
+from server.db_tools import get_jobs_range
+from server.job_provider import JobProvider
+from server.train_model import ModelProvider
 
 
 app = Flask(__name__, static_folder='../web-app/build')
@@ -17,16 +18,42 @@ throttle_duration = config['throttle_duration']
 db_name = config['mongo']['data']['db_name']
 table_name = config['mongo']['data']['table_name']
 label_key = config['mongo']['data']['label_key']
+settings_table_name = config['mongo']['settings']['table_name']
+sequence_key = "sequence_length"
 
 db = client[db_name]
 jobs_table = db[table_name]
+settings_table = db[settings_table_name]
 
 job_provider = JobProvider(jobs_host, throttle_group_size, throttle_duration)
+model_provider = ModelProvider()
 
-@app.route('/api/jobs', methods=['POST'])
-def loadJobs():
-    # jobsResponse = requests.get(f'{jobs_host}/v4beta1/jobs:search')
-    pass
+# TODO: handle error condition of no saved embedding when run if you get around to it
+@app.route('/api/model', methods=['POST'])
+def trainModel():
+    params = request.get_json()
+    labeled_jobs = jobs_table.find({ '$and': [{ 'preferred': { '$exists': True } }, { 'text': { '$exists': True } }] })
+    score, train_history, trained_sequence_length = model_provider.train_model(labeled_jobs, params)
+    settings_table.update({ 'key': sequence_key }, { 'key': sequence_key, 'value': trained_sequence_length }, upsert=True)
+    return jsonify({ 'score': float(score), 'history': convert_history(train_history) })
+
+@app.route('/api/model/predict', methods=['POST'])
+def predict_text():
+    params = request.get_json()
+    text = params['text']
+    max_sequence_length = int(settings_table.find_one({ 'key': sequence_key })['value'])
+    if len(text) > 0:
+        prediction = model_provider.predict(text, max_sequence_length)
+        return jsonify({ label_key: prediction })
+
+@app.route('/api/model/predictbulk', methods=['POST'])
+def predict_bulk():
+    jobs = request.get_json()
+    jobs = [ job for job in jobs if len(job.get('text', '')) > 0 ]
+    max_sequence_length = int(settings_table.find_one({ 'key': sequence_key })['value'])
+    if len(jobs) > 0:
+        predictions = model_provider.predict_bulk(jobs, max_sequence_length)
+        return jsonify(predictions)
 
 @app.route('/api/jobs/<int:job_id>', methods=['PUT'])
 def updateJob(job_id):
@@ -46,7 +73,7 @@ def getJobs():
     if len(unlabeled_jobs) != 0:
         return jsonify([JobProvider.format_post(x) for x in unlabeled_jobs])
     else:
-        oldest_id, newist_id = db_tools.get_jobs_range(jobs_table)
+        oldest_id, newest_id = get_jobs_range(jobs_table)
         new_jobs = job_provider.get_next_post(historical_limit, oldest_id, newest_id)
         if new_jobs is not None:
             jobs_table.insert_many(new_jobs)
@@ -54,15 +81,15 @@ def getJobs():
         else:
             abort(404)
 
-@app.route('/api/jobs/<id>', methods=['PUT'])
-def labelJob(id):
-    # TODO: use provided id to determine which record to update, apply match criteria to record
-    pass
-
 @app.route('/', defaults={'path': 'index.html'})
 @app.route('/<path:path>')
 def reactApp(path):
     if path != '' and os.path.exists(app.static_folder + '/' + path):
         return send_from_directory(app.static_folder, path)
 
-def 
+
+def convert_history(history):
+    return { metric: convert_metric(history, metric) for metric in ['loss', 'val_loss', 'accuracy', 'val_accuracy'] }
+
+def convert_metric(history, metric):
+    return [ float(x) for x in history.get(metric, []) ]

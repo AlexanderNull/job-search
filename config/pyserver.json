@@ -10,6 +10,9 @@
         "embedding_data": {
             "db_name": "job-search-database",
             "table_name": "embeddings"
+        },
+        "settings": {
+            "table_name": "settings"
         }
     },
     "jobs_firebase_host": "https://hacker-news.firebaseio.com/v0",
@@ -17,5 +20,29 @@
     "throttle_group_size": 20,
     "throttle_duration": 1,
     "whos_hiring_user": "whoishiring",
-    "whos_hiring_search_string":  "ho is hiring?"
+    "whos_hiring_search_string":  "ho is hiring?",
+    "end_of_sentence": "<EOS>",
+    "model_save_path": "server/personal_models/sentiment_model.tf",
+    "use_google_embedding": true,
+    "embedding_save_path": "server/embedding/job_embedding.kv",
+    "tfidf_save_path": "server/tfidf.pickle",
+    "scaler_save_path": "server/personal_models/vector_scaler.pkl",
+    "trained_embedding_path": "server/personal_models/GoogleNews-vectors-negative300.bin",
+    "model": {
+        "max_sequence_length": 200,
+        "min_sequence_length": 20,
+        "should_under_sample": true,
+        "under_sample_ratio": 1,
+        "learning_rate": 0.0001,
+        "epochs": 100,
+        "batch_size": 8,
+        "lstm_units": 8,
+        "lstm_layers": 1,
+        "use_tfidf": true,
+        "dropout": 0.2,
+        "dev_split": 0.2,
+        "test_split": 0.2,
+        "synthesize_factor": 2,
+        "use_amsgrad": true
+    }
 }
