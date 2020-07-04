@@ -16,7 +16,7 @@ class JobProvider:
 
     # This class is db agnostic, pass in lowest_saved_id if you have anything saved or you'll get the same result each time 
     def get_next_post(self, historical_limit = 1, lowest_saved_id = None, highest_saved_id = None):
-        whois_post_ids = self.get_json(f'/user/{self.hiring_user}/submitted.json')
+        whois_post_ids = self.get_whois_post_ids()
         post_ids_iter = iter(whois_post_ids) if lowest_saved_id is None or highest_saved_id is None else (
             # Overoptimization perhaps? assumption is that there's going to be more than 2x posts on the right tail than we'll iterate through here
             chain(takewhile(lambda x: x > highest_saved_id, whois_post_ids), dropwhile(lambda x: x >= lowest_saved_id, whois_post_ids))
@@ -31,11 +31,15 @@ class JobProvider:
 
         return month_posts
 
+    # These are returned in date desc order by default
+    def get_whois_post_ids(self):
+        return self.get_json(f'/user/{self.hiring_user}/submitted.json')
+
     def get_hiring_posts(self, parent_id, historical_limit):
         posts = []
         hiring_post = self.get_json(f'/item/{parent_id}.json')
         post_date = date.fromtimestamp(hiring_post['time'])
-        if 'deleted' in hiring_post or not self.is_valid_post(post_date, hiring_post['title'], historical_limit, self.hiring_string):
+        if 'deleted' in hiring_post or not self.is_valid_post(post_date, hiring_post['title'], historical_limit):
             return None
         else:
             print(f'Fetching posts for {post_date}.')
@@ -61,16 +65,42 @@ class JobProvider:
 
         return response.json()
 
+    def get_months(self, num_months):
+        whois_ids = self.get_whois_post_ids()
+        month_posts = []
+        for id in whois_ids:
+            post = self.get_json(f'/item/{id}.json')
+            post_date = date.fromtimestamp(post['time'])
+            if self.is_valid_title(post.get('title', '')):
+                if self.is_valid_date(post_date, num_months, search_within_limit= True):
+                    month_posts.append(post)
+                else:
+                    # posts are by desc date, once we reach a post too old then we're done searching
+                    return month_posts
+
+        return month_posts # just incase limit was too big to reach
+
     @staticmethod
-    def is_valid_post(post_date, post_title, month_limit, search_string):
+    def is_valid_post(post_date, post_title, month_limit, search_string, search_within_limit = False):
+        return JobProvider.is_valid_title(post_title) and JobProvider.search_by_limit(post_date, month_limit, search_within_limit)
+
+    @staticmethod
+    def is_valid_title(title):
+        return JobProvider.hiring_string in title
+
+    @staticmethod
+    def is_valid_date(post_date, limit, search_within_limit):
         today = date.today()
 
         # a month of 0 doesn't exactly work. Need to offset by one when determining if limit pushes us to prior year once we hit month 0 (which would be december)
-        year_limit = today.year + min((today.month - month_limit - 1) // 12, 0)
-        month_limit = ((today.month - month_limit -1) % 12) + 1
-        return search_string in post_title and (
-            (post_date.year == year_limit and post_date.month <= month_limit) or post_date.year < year_limit
-        )
+        year_limit = today.year + min((today.month - limit - 1) // 12, 0)
+        month_limit = ((today.month - limit -1) % 12) + 1
+
+        if search_within_limit:
+            return (post_date.year == year_limit and post_date.month > month_limit) or post_date.year > year_limit
+        else:
+            return (post_date.year == year_limit and post_date.month <= month_limit) or post_date.year < year_limit
+
 
     @staticmethod
     def parse_post(post, parent_date):

@@ -37,6 +37,12 @@ def trainModel():
     settings_table.update({ 'key': sequence_key }, { 'key': sequence_key, 'value': trained_sequence_length }, upsert=True)
     return jsonify({ 'score': float(score), 'history': convert_history(train_history) })
 
+@app.route('/api/months')
+def get_months():
+    num_months = request.args.get('numMonths', 6)
+    months = job_provider.get_months(num_months)
+    return jsonify([JobProvider.format_post(x) for x in months])
+
 @app.route('/api/model/predict', methods=['POST'])
 def predict_text():
     params = request.get_json()
