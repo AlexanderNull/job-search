@@ -39,7 +39,7 @@ def trainModel():
 
 @app.route('/api/months')
 def get_months():
-    num_months = request.args.get('numMonths', 6)
+    num_months = request.args.get('numMonths', 12)
     months = job_provider.get_months(num_months)
     return jsonify([JobProvider.format_post(x) for x in months])
 

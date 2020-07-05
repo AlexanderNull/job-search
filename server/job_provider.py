@@ -130,5 +130,6 @@ class JobProvider:
             'id': post.get('id'),
             'parent': post.get('parent'),
             'date': post.get('date'),
-            'preferred': post.get('preferred')
+            'preferred': post.get('preferred'),
+            'title': post.get('title')
         }

@@ -11,7 +11,6 @@ import {ROUTES} from '../state/JobStore';
 class App extends React.Component {
   componentDidMount() {
     window.onkeydown = jobStore.handleKeyDown;
-    jobStore.loadJobs();
   }
 
   render() {

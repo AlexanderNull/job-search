@@ -16,6 +16,7 @@ const jobStore = observable({
     activeRoute: ROUTES.HOME,
     predictMonth: null,
     loadingPredictions: false,
+    loadingMonths: false,
     preferredPredictions: [],
     monthPosts: [],
 });
@@ -85,17 +86,25 @@ jobStore.goBack = action(function () {
 });
 
 jobStore.setRoute = action(function (route) {
-    if (route === 'PREDICT' && jobStore.monthPosts.length === []) {
-        jobStore.getMonths();
+    if (route === ROUTES.PREDICT) {
+        jobStore.setPredictMonth(null);
+        if (jobStore.monthPosts.length === 0) {
+            jobStore.getMonths();
+        }
+    } else if (route === ROUTES.LABEL) {
+        jobStore.loadJobs();
     }
     jobStore.activeRoute = route;
 });
 
 jobStore.getMonths = action(async function () {
-    const monthsCall = await fetch(`${serverUrl}/api/jobs/recentMonths`);
+    jobStore.loadingMonths = true;
+    const monthsCall = await fetch(`${serverUrl}/api/months`);
 
     if (monthsCall.status === 200) {
-        jobStore.monthPosts = await monthsCall.json();
+        const monthPosts = await monthsCall.json();
+        jobStore.monthPosts = monthPosts;
+        jobStore.loadingMonths = false;
     }
 });
 
@@ -108,7 +117,7 @@ jobStore.setPredictMonth = action(function (postId) {
 });
 
 jobStore.getPredictions = action(async function (postId) {
-    const predictionsCall = await fetch(`${serverUrl}/api/jobs/predictChildren/${postId}`);
+    const predictionsCall = await fetch(`${serverUrl}/api/model/predict/${postId}`);
     
     if (predictionsCall.status === 200) {
         jobStore.preferredPredictions = await predictionsCall.json();
