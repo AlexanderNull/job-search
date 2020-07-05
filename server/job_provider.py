@@ -8,6 +8,7 @@ from server.config import config
 class JobProvider:
     hiring_string = config['whos_hiring_search_string']
     hiring_user = config['whos_hiring_user']
+    min_post_length = 50
 
     def __init__(self, jobs_api_url, throttle_group_size = None, throttle_duration = 1):
         self.jobs_api_url = jobs_api_url
@@ -26,7 +27,7 @@ class JobProvider:
         # TODO: upgrade this to walrus operator once you can bump to python 3.8
         next_id = next(post_ids_iter, None)
         while month_posts is None and next_id is not None:
-            month_posts = self.get_hiring_posts(next_id, historical_limit)
+            month_posts = self.lookup_hiring_posts(next_id, historical_limit)
             next_id = next(post_ids_iter, None)
 
         return month_posts
@@ -35,26 +36,34 @@ class JobProvider:
     def get_whois_post_ids(self):
         return self.get_json(f'/user/{self.hiring_user}/submitted.json')
 
-    def get_hiring_posts(self, parent_id, historical_limit):
-        posts = []
+    def lookup_hiring_posts(self, parent_id, historical_limit):
         hiring_post = self.get_json(f'/item/{parent_id}.json')
         post_date = date.fromtimestamp(hiring_post['time'])
         if 'deleted' in hiring_post or not self.is_valid_post(post_date, hiring_post['title'], historical_limit):
             return None
         else:
             print(f'Fetching posts for {post_date}.')
-            for i, child_id in enumerate(hiring_post['kids']):
-                # TODO: update this if you intend for concurrent users
-                if self.throttle_group_size is not None:
-                    if i % self.throttle_group_size == 0:
-                        time.sleep(self.throttle_duration)
+            return self.get_child_posts(parent_id, hiring_post['time'], hiring_post['kids'], self.throttle_group_size, self.throttle_duration)
 
-                child_post = self.get_json(f'/item/{child_id}.json')
-                # TODO: injestion validation if there's too much junk
-                if child_post is not None and child_post.get('parent') == parent_id:
-                    posts.append(self.parse_post(child_post, hiring_post['time']))
+    # largely differs from lookup_hiring_posts by assuming that the parent id is a valid hiring post
+    def get_hiring_posts(self, parent_id):
+        hiring_post = self.get_json(f'/item/{parent_id}.json')
+        return self.get_child_posts(parent_id, hiring_post['time'], hiring_post['kids'])
 
-            return posts
+    def get_child_posts(self, parent_id, parent_time, child_ids, throttle_group_size = None, throttle_duration = None):
+        posts = []
+        for i, child_id in enumerate(child_ids):
+            # TODO: update this if you intend for concurrent users
+            if throttle_group_size is not None:
+                if i % throttle_group_size == 0:
+                    time.sleep(throttle_duration)
+
+            child_post = self.get_json(f'/item/{child_id}.json')
+            # TODO: injestion validation if there's too much junk
+            if child_post is not None and child_post.get('parent') == parent_id and len(child_post.get('text', '')) > self.min_post_length:
+                posts.append(self.parse_post(child_post, parent_time))
+
+        return posts
 
     def get_json(self, path):
         url = f'{self.jobs_api_url}{path}'
