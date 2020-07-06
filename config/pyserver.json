@@ -23,7 +23,7 @@
     "whos_hiring_search_string":  "ho is hiring?",
     "end_of_sentence": "<EOS>",
     "model_save_path": "server/personal_models/sentiment_model.tf",
-    "use_google_embedding": false,
+    "use_google_embedding": true,
     "embedding_save_path": "server/embedding/job_embedding.kv",
     "tfidf_save_path": "server/tfidf.pickle",
     "scaler_save_path": "server/personal_models/vector_scaler.pkl",
