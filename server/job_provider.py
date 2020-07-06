@@ -53,7 +53,6 @@ class JobProvider:
     def get_child_posts(self, parent_id, parent_time, child_ids, throttle_group_size = None, throttle_duration = None):
         posts = []
         for i, child_id in enumerate(child_ids):
-            # TODO: update this if you intend for concurrent users
             if throttle_group_size is not None:
                 if i % throttle_group_size == 0:
                     time.sleep(throttle_duration)

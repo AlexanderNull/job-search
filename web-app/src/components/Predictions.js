@@ -1,10 +1,10 @@
 import React from 'react';
 import {observer} from 'mobx-react';
-import '../styles/Predictions.css';
+import JobText from './JobText';
 
 const Predictions = observer(function InnerPredictions (props) {
     const {store} = props;
-    const {monthPosts, predictMonth, loadingMonths} = store;
+    const {predictMonth, loadingMonths} = store;
 
     if (loadingMonths) {
         return <div className="loading">Loading Months</div>
@@ -18,8 +18,7 @@ const Predictions = observer(function InnerPredictions (props) {
 function PredictionMonths (props) {
     const {store} = props;
     const {monthPosts} = store;
-
-    console.log("posts", monthPosts);
+    
     return (
         <div className="prediction-months">
             {monthPosts.map(month => (
@@ -36,11 +35,10 @@ const PredictionJobs = observer(function InnnerPredictionJobs (props) {
     if (loadingPredictions) {
         return <div className="loading">Loading Predictions</div>
     } else {
+        const len = preferredPredictions.length;
         return (
             <div className="prediction-jobs">
-                {preferredPredictions.map(job => (
-                    <div className="job">{job.text}</div>
-                ))}
+                {preferredPredictions.map((job, i) => <JobText dangerousText={job.text} shouldSplit={i < (len - 1)} />)}
             </div>
         )
     }

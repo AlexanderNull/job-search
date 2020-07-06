@@ -2,6 +2,7 @@ import {action, observable} from 'mobx';
 import {ROUTES, SERVER_URL} from './Constants';
 
 const jobStore = observable({
+    loadingJobs: true,
     nextJob: null,
     prevJobs: [],
     jobs: [],
@@ -13,15 +14,16 @@ const jobStore = observable({
     monthPosts: [],
 });
 
-// TODO: need a loader here, pulling everything from a month takes a minute or two
 jobStore.loadJobs = action(async function () {
     console.log('Grabbing more jobs!');
+    jobStore.loadingJobs = true;
     const jobsCall = await fetch(`${SERVER_URL}/api/jobs/unlabeled`);
     const moreJobs = await jobsCall.json();
     if (jobStore.nextJob == null) {
         jobStore.nextJob = moreJobs.shift();
     }
     jobStore.jobs = moreJobs;
+    jobStore.loadingJobs = false;
 });
 
 jobStore.handleKeyDown = action(function(keyEvent) {
