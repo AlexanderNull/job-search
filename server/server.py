@@ -37,6 +37,12 @@ def trainModel():
     settings_table.update({ 'key': sequence_key }, { 'key': sequence_key, 'value': trained_sequence_length }, upsert=True)
     return jsonify({ 'score': float(score), 'history': convert_history(train_history) })
 
+@app.route('/api/months')
+def get_months():
+    num_months = request.args.get('numMonths', 12)
+    months = job_provider.get_months(num_months)
+    return jsonify([JobProvider.format_post(x) for x in months])
+
 @app.route('/api/model/predict', methods=['POST'])
 def predict_text():
     params = request.get_json()
@@ -46,14 +52,18 @@ def predict_text():
         prediction = model_provider.predict(text, max_sequence_length)
         return jsonify({ label_key: prediction })
 
+@app.route('/api/model/predict/<int:parent_id>', methods=['GET'])
+def predict_by_parent(parent_id):
+    posts = job_provider.get_hiring_posts(parent_id)
+    posts = [ JobProvider.format_post(x) for x in posts ]
+    predictions = predict_bulk_inner(posts)
+    preferred_ids = set([ p['id'] for p in predictions if p[label_key] == 1 ])
+    return jsonify([ post for post in posts if post['id'] in preferred_ids ])
+
 @app.route('/api/model/predictbulk', methods=['POST'])
 def predict_bulk():
     jobs = request.get_json()
-    jobs = [ job for job in jobs if len(job.get('text', '')) > 0 ]
-    max_sequence_length = int(settings_table.find_one({ 'key': sequence_key })['value'])
-    if len(jobs) > 0:
-        predictions = model_provider.predict_bulk(jobs, max_sequence_length)
-        return jsonify(predictions)
+    return jsonify(predict_bulk_inner(jobs))
 
 @app.route('/api/jobs/<int:job_id>', methods=['PUT'])
 def updateJob(job_id):
@@ -93,3 +103,9 @@ def convert_history(history):
 
 def convert_metric(history, metric):
     return [ float(x) for x in history.get(metric, []) ]
+
+def predict_bulk_inner(jobs):
+    jobs = [ job for job in jobs if len(job.get('text', '')) > 0 ]
+    max_sequence_length = int(settings_table.find_one({ 'key': sequence_key })['value'])
+    if len(jobs) > 0:
+        return model_provider.predict_bulk(jobs, max_sequence_length)

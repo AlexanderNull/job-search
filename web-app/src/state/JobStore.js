@@ -1,22 +1,29 @@
 import {action, observable} from 'mobx';
-
-const serverUrl = 'http://localhost:5000'
+import {ROUTES, SERVER_URL} from './Constants';
 
 const jobStore = observable({
+    loadingJobs: true,
     nextJob: null,
     prevJobs: [],
     jobs: [],
+    activeRoute: ROUTES.HOME,
+    predictMonth: null,
+    loadingPredictions: false,
+    loadingMonths: false,
+    preferredPredictions: [],
+    monthPosts: [],
 });
 
-// TODO: need a loader here, pulling everything from a month takes a minute or two
 jobStore.loadJobs = action(async function () {
     console.log('Grabbing more jobs!');
-    const jobsCall = await fetch(`${serverUrl}/api/jobs/unlabeled`);
+    jobStore.loadingJobs = true;
+    const jobsCall = await fetch(`${SERVER_URL}/api/jobs/unlabeled`);
     const moreJobs = await jobsCall.json();
     if (jobStore.nextJob == null) {
         jobStore.nextJob = moreJobs.shift();
     }
     jobStore.jobs = moreJobs;
+    jobStore.loadingJobs = false;
 });
 
 jobStore.handleKeyDown = action(function(keyEvent) {
@@ -43,7 +50,7 @@ jobStore.handleKeyDown = action(function(keyEvent) {
 });
 
 jobStore.labelJob = action(async function(isMatch) {
-    const updateCall = await fetch(`${serverUrl}/api/jobs/${jobStore.nextJob.id}`, {
+    const updateCall = await fetch(`${SERVER_URL}/api/jobs/${jobStore.nextJob.id}`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',
@@ -69,6 +76,46 @@ jobStore.goBack = action(function () {
     if (jobStore.prevJobs.length > 0) {
         jobStore.jobs.unshift(jobStore.nextJob);
         jobStore.nextJob = jobStore.prevJobs.pop();
+    }
+});
+
+jobStore.setRoute = action(function (route) {
+    if (route === ROUTES.PREDICT) {
+        jobStore.setPredictMonth(null);
+        if (jobStore.monthPosts.length === 0) {
+            jobStore.getMonths();
+        }
+    } else if (route === ROUTES.LABEL) {
+        jobStore.loadJobs();
+    }
+    jobStore.activeRoute = route;
+});
+
+jobStore.getMonths = action(async function () {
+    jobStore.loadingMonths = true;
+    const monthsCall = await fetch(`${SERVER_URL}/api/months`);
+
+    if (monthsCall.status === 200) {
+        const monthPosts = await monthsCall.json();
+        jobStore.monthPosts = monthPosts;
+        jobStore.loadingMonths = false;
+    }
+});
+
+jobStore.setPredictMonth = action(function (postId) {
+    jobStore.predictMonth = postId;
+    if (postId != null) {
+        jobStore.loadingPredictions = true;
+        jobStore.getPredictions(postId);
+    }
+});
+
+jobStore.getPredictions = action(async function (postId) {
+    const predictionsCall = await fetch(`${SERVER_URL}/api/model/predict/${postId}`);
+    
+    if (predictionsCall.status === 200) {
+        jobStore.preferredPredictions = await predictionsCall.json();
+        jobStore.loadingPredictions = false;
     }
 });
 

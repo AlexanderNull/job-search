@@ -55,3 +55,20 @@
 .App-link {
   color: #61dafb;
 }
+
+nav {
+  display: flex;
+  width: 100%;
+  justify-content: space-around;
+  border-bottom: solid 5px;
+  margin-bottom: 10px;
+  padding-bottom: 5px;
+}
+
+.link {
+  cursor: pointer;
+}
+
+.active {
+  color: #fca903;
+}

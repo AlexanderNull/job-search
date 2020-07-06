@@ -1,4 +1,5 @@
 import React from 'react';
+import JobText from './JobText';
 
 function Posting (props) {
     const {
@@ -24,20 +25,6 @@ function Posting (props) {
             <section className="description">
                 <JobText dangerousText={text} />
             </section>
-        </div>
-    )
-}
-
-// Definitely not going to parse out all of this by hand
-// Definitely not going to trust "Hacker" News with having safe input
-// Stick to textarea to avoid XSS issues
-// TODO: maybe handle the links
-function JobText (props) {
-    var decoder = document.createElement('textarea');
-    decoder.innerHTML = props.dangerousText;
-    return (
-        <div>
-            {decoder.value.split('<p>').map(t => <p>{t}</p>)}
         </div>
     )
 }
