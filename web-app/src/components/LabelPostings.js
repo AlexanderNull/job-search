@@ -2,12 +2,21 @@ import React from 'react';
 import Posting from './Posting';
 import NoJobs from './NoJobs';
 
-function LabelPostings (props) {
-    const {store} = props;
+class LabelPostings extends React.Component {
+  
+  componentDidMount() {
+    window.onkeydown = this.props.store.handleKeyDown;
+  }
+
+  componentWillUnmount() {
+    window.onkeydown = null;
+  }
+
+  render () {
+    const {store} = this.props;
     const {nextJob, jobs} = store;
     const numberOfJobs = jobs.length;
 
-    console.log('in labels');
     return (
         <div className="postings">
         {(nextJob != null ?
@@ -16,6 +25,7 @@ function LabelPostings (props) {
         }
       </div>
     )
+  }
 }
 
 export default LabelPostings;
