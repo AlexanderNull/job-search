@@ -1,0 +1,13 @@
+.controls, .charts {
+    grid-template-columns: 50% 50%;
+    justify-items: start;
+    display: grid;
+}
+
+.admin-shell {
+    width: 80vw;
+}
+
+.control input {
+    padding-left: 20px;
+}

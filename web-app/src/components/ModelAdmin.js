@@ -1,7 +1,8 @@
 import React from 'react';
 import {observer} from 'mobx-react';
-import {LineChart, XAxis, YAxis, Line, Tooltip} from 'recharts';
+import {LineChart, XAxis, YAxis, Line, Tooltip, Legend} from 'recharts';
 import {MODEL_CONTROLS} from '../state/Constants';
+import '../styles/ModelAdmin.css';
 
 const ModelAdmin = observer(function InnerModelAdmin (props) {
     const {store} = props;
@@ -55,22 +56,24 @@ function TrainingHistory (props) {
     const {trainingHistory, trainingModel} = props;
 
     if (trainingModel) {
-        return <div className="loading" />
+        return <div className="loading">Training Model, this may take a while </div>
     } else if (trainingHistory.length > 0) {
         return (
             <div className="charts">
-                <LineChart width={500} height={300} data={trainingHistory}>
+                <LineChart width={700} height={400} data={trainingHistory}>
                     <XAxis dataKey="epoch" />
                     <YAxis />
                     <Tooltip />
-                    <Line dataKey="loss" />
+                    <Legend />
+                    <Line dataKey="loss" stroke="#fca903" />
                     <Line dataKey="validationLoss" />
                 </LineChart>
-                <LineChart width={500} height={300} data={trainingHistory}>
+                <LineChart width={700} height={400} data={trainingHistory}>
                     <XAxis dataKey="epoch" />
                     <YAxis />
                     <Tooltip />
-                    <Line dataKey="accuracy" />
+                    <Legend />
+                    <Line dataKey="accuracy" stroke="#fca903" />
                     <Line dataKey="validationAccuracy" />
                 </LineChart>
             </div>

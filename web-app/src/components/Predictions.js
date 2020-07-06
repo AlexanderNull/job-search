@@ -1,5 +1,6 @@
 import React from 'react';
 import {observer} from 'mobx-react';
+import '../styles/Predictions.css';
 
 const Predictions = observer(function InnerPredictions (props) {
     const {store} = props;
@@ -38,7 +39,7 @@ const PredictionJobs = observer(function InnnerPredictionJobs (props) {
         return (
             <div className="prediction-jobs">
                 {preferredPredictions.map(job => (
-                    <div>{job.text}</div>
+                    <div className="job">{job.text}</div>
                 ))}
             </div>
         )

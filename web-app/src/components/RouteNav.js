@@ -1,4 +1,5 @@
 import React from 'react';
+import {ROUTES} from '../state/Constants';
 
 function RouteNav (props) {
     const {
@@ -8,11 +9,11 @@ function RouteNav (props) {
         store,
     } = props;
 
-    const baseClass = 'route-nav-button';
+    const baseClass = 'route-nav-button link';
 
     return (
         <div
-        className={activeRoute === routeKey ? baseClass + ' active' : baseClass}
+        className={activeRoute === ROUTES[routeKey] ? baseClass + ' active' : baseClass}
         onClick={() => store.setRoute(routeLabel)}>
             {routeLabel}
         </div>
