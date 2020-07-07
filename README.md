@@ -4,6 +4,8 @@ Text classification job posting labeling and suggesting.
 - Navigate to the Admin UI to tweak hyperparameters and train a model based on the jobs you've labeled. The number of jobs you'll need labeled will differ based on your preferences, but 2-3 months worth of labeled jobs is a good rough spot.
 - Now go to the Prediction UI and select a month to feed through the model, sit back and receive a list of curated job postings that your model thinks you'd be interested in!
 
+![Model training UI](/examples/adminConsole.png?raw=true "Train your model with ease!")
+
 ## Steps to run:
 - You'll need to see what your environment's local IP is and update that in App.js
 - navigate to web-app and run "npm run build"
