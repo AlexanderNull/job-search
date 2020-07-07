@@ -61,7 +61,7 @@ function TrainingHistory (props) {
         return (
             <div className="charts">
                 <LineChart width={700} height={400} data={trainingHistory}>
-                    <XAxis dataKey="epoch" />
+                    <XAxis dataKey="epoch" interval="preserveStartEnd" />
                     <YAxis />
                     <Tooltip />
                     <Legend />
@@ -69,7 +69,7 @@ function TrainingHistory (props) {
                     <Line dataKey="validationLoss" />
                 </LineChart>
                 <LineChart width={700} height={400} data={trainingHistory}>
-                    <XAxis dataKey="epoch" />
+                    <XAxis dataKey="epoch" interval="preserveStartEnd" />
                     <YAxis />
                     <Tooltip />
                     <Legend />

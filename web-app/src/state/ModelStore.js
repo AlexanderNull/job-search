@@ -3,13 +3,13 @@ import {SERVER_URL} from './Constants';
 
 const defaultVals = {
     maxSequenceLength: 200,
-    batchSize: 16,
-    epochs: 50,
-    learningRate: 0.0001,
+    batchSize: 32,
+    epochs: 25,
+    learningRate: 0.001,
     dropout: 0.2,
     testSplit: 0.2,
     devSplit: 0.2,
-    lstmUnits: 8,
+    lstmUnits: 32,
     lstmLayers: 2,
     trainingModel: false,
     trainingHistory: {},

@@ -1,4 +1,5 @@
 from flask import abort, Flask, send_from_directory, request, jsonify
+from flask_caching import Cache
 import os
 from pymongo import MongoClient
 import requests
@@ -8,8 +9,16 @@ from server.db_tools import get_jobs_range
 from server.job_provider import JobProvider
 from server.train_model import ModelProvider
 
+cache_config =  {
+    "DEBUG": True,
+    "CACHE_TYPE": "simple",
+    "CACHE_DEFAULT_TIMEOUT": 300
+}
 
 app = Flask(__name__, static_folder='../web-app/build')
+app.config.from_mapping(cache_config)
+cache = Cache(app)
+
 client = MongoClient(config['mongo']['host'], config['mongo']['port'])
 jobs_host = config['jobs_firebase_host']
 historical_limit = config['historical_limit']
@@ -35,9 +44,11 @@ def trainModel():
     labeled_jobs = jobs_table.find({ '$and': [{ 'preferred': { '$exists': True } }, { 'text': { '$exists': True } }] })
     score, train_history, trained_sequence_length = model_provider.train_model(labeled_jobs, params)
     settings_table.update({ 'key': sequence_key }, { 'key': sequence_key, 'value': trained_sequence_length }, upsert=True)
+    cache.clear()
     return jsonify({ 'score': float(score), 'history': convert_history(train_history) })
 
 @app.route('/api/months')
+@cache.cached()
 def get_months():
     num_months = request.args.get('numMonths', 12)
     months = job_provider.get_months(num_months)
@@ -53,6 +64,7 @@ def predict_text():
         return jsonify({ label_key: prediction })
 
 @app.route('/api/model/predict/<int:parent_id>', methods=['GET'])
+@cache.cached()
 def predict_by_parent(parent_id):
     posts = job_provider.get_hiring_posts(parent_id)
     posts = [ JobProvider.format_post(x) for x in posts ]
